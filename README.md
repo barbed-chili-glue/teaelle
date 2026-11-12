@@ -38,6 +38,31 @@ Settings → **Load demo data** loads 82 fictional brews across three teas, with
 
 The app includes `manifest.webmanifest`, a service worker, and 192/512 icons. On Android Chrome, open the live URL and choose **Add to Home screen**. The app works offline after the first load.
 
+## Android app
+
+`android/` is a minimal, offline WebView shell around the same web app. It
+bundles `index.html` in `assets/www`, serves it through
+`WebViewAssetLoader`, declares no `INTERNET` permission, and keeps
+localStorage across in-place updates.
+
+The release APK is signed with the stable `teaelle` key. Future builds must use
+the same package (`com.teaelle.app`), the same key, and a higher `versionCode`;
+see [`SIGNING.md`](SIGNING.md). The keystore itself lives outside the
+repository.
+
+```bash
+cd android
+export ANDROID_HOME=/root/android-sdk
+export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+export RELEASE_KEYSTORE_FILE=/root/.teaelle-signing/teaelle-release.keystore
+export RELEASE_STORE_PASSWORD="$(cat /root/.teaelle-signing/storepass.txt)"
+export RELEASE_KEY_ALIAS=teaelle
+export RELEASE_KEY_PASSWORD="$(cat /root/.teaelle-signing/storepass.txt)"
+export VERSION_CODE=1
+export VERSION_NAME=1.0.0
+/root/gradle-8.9/bin/gradle --no-daemon assembleRelease
+```
+
 ## Scope and next steps
 
 This is a demo, not the final product. Next steps:

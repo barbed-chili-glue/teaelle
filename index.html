@@ -1323,12 +1323,23 @@ function loadDemo() {
 }
 
 function exportJson() {
-  const payload = {app: 'steep', version: 1, exportedAt: new Date().toISOString(), data: state};
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {type: 'application/json'});
+  const filename = `teaelle-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  const payload = {app: 'teaelle', version: 1, exportedAt: new Date().toISOString(), data: state};
+  const json = JSON.stringify(payload, null, 2);
+
+  // The Android shell cannot reliably download a Blob; use the native share
+  // sheet instead so the backup can be saved to Drive, email, or Files.
+  if (window.AndroidApp && typeof window.AndroidApp.shareJson === 'function') {
+    window.AndroidApp.shareJson(filename, json);
+    toast('Export ready to share');
+    return;
+  }
+
+  const blob = new Blob([json], {type: 'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `teaelle-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -1653,9 +1664,24 @@ window.__appErrors = [];
 window.addEventListener('error', e => window.__appErrors.push(String(e.message || e)));
 window.addEventListener('unhandledrejection', e => window.__appErrors.push(String(e.reason || e)));
 
+window.handleAndroidBack = function() {
+  if (ui.sheet) {
+    ui.sheet = null;
+    render();
+    return true;
+  }
+  if (ui.tab !== 'brew') {
+    ui.tab = 'brew';
+    render();
+    return true;
+  }
+  return false;
+};
+
 render();
 
-if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+const isAndroidShell = new URLSearchParams(location.search).get('android') === '1';
+if (!isAndroidShell && 'serviceWorker' in navigator && location.protocol.startsWith('http')) {
   window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
 }
 </script>

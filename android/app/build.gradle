@@ -1,0 +1,81 @@
+plugins {
+    id "com.android.application"
+}
+
+// Release signing is supplied as environment variables. No key material is
+// ever checked into the repository. The keystore lives outside the repo and
+// must be preserved: it is the app's update identity.
+def releaseKeystorePath = System.getenv("RELEASE_KEYSTORE_FILE")
+def releaseStorePassword = System.getenv("RELEASE_STORE_PASSWORD")
+def releaseKeyAlias = System.getenv("RELEASE_KEY_ALIAS")
+def releaseKeyPassword = System.getenv("RELEASE_KEY_PASSWORD")
+def hasReleaseSigning = releaseKeystorePath && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+def buildVersionCode = (System.getenv("VERSION_CODE") ?: "1").toInteger()
+def buildVersionName = System.getenv("VERSION_NAME") ?: "1.0.0"
+
+android {
+    namespace "com.teaelle.app"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.teaelle.app"
+        minSdk 26
+        targetSdk 35
+        versionCode buildVersionCode
+        versionName buildVersionName
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(releaseKeystorePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+}
+
+// Bundle the same static web app that the browser demo uses. Keeping one
+// source of truth avoids the APK drifting from the web version.
+def webSource = rootProject.file("../")
+def webDestination = file("$projectDir/src/main/assets/www")
+
+tasks.register("syncWebAssets", Sync) {
+    from(webSource) {
+        include "index.html"
+        include "manifest.webmanifest"
+        include "sw.js"
+        include "icon.svg"
+        include "icon-192.png"
+        include "icon-512.png"
+    }
+    into webDestination
+}
+
+tasks.named("preBuild").configure { dependsOn("syncWebAssets") }
+
+dependencies {
+    implementation "androidx.core:core:1.15.0"
+    implementation "androidx.webkit:webkit:1.12.1"
+}
