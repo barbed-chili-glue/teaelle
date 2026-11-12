@@ -6,9 +6,10 @@ A mobile-first, local-first tea brewing notebook that learns from your cups.
 
 ## What it does
 
-- **Brew** — pick a tea product, set water, milk, temperature and bag handling, then start the timer as the bag goes in. Stop it when the bag comes out.
+- **Brew** — pick a tea product, set water, milk, temperature and bag handling, then start the timer as the bag goes in. Stop it when the bag comes out; a **confirm** sheet lets you correct the actuals (especially milk, weighed after the timer) before saving.
+- **Tea library** — add, edit or delete tea products, including the suggested temperature and steep time. Historical brews keep a snapshot of the tea they were brewed with, so deleting a tea never breaks history.
 - **Rate blind** — the rating sheet hides the brewing parameters until you save. Rate overall (1–7), strength, bitterness/astringency, milk balance, and whether you'd brew again. Multiple raters per cup are supported.
-- **History** — unrated cups are queued at the top; every brew keeps its parameters and all of its ratings.
+- **History** — unconfirmed cups and unrated cups are queued at the top as **needs attention**; every brew keeps its parameters, tea snapshot and all of its ratings.
 - **Insights** — a demo ridge model fits a quadratic response surface over steep time and temperature, ranks the drivers, shows the best cup so far, and proposes a balanced 2×3 experiment around the predicted peak.
 - **Local-first** — everything is stored in `localStorage` on the device. No account, no server, no telemetry. Export/import JSON from Settings.
 
@@ -58,8 +59,8 @@ export RELEASE_KEYSTORE_FILE=/root/.teaelle-signing/teaelle-release.keystore
 export RELEASE_STORE_PASSWORD="$(cat /root/.teaelle-signing/storepass.txt)"
 export RELEASE_KEY_ALIAS=teaelle
 export RELEASE_KEY_PASSWORD="$(cat /root/.teaelle-signing/storepass.txt)"
-export VERSION_CODE=1
-export VERSION_NAME=1.0.0
+export VERSION_CODE=2
+export VERSION_NAME=1.0.1
 /root/gradle-8.9/bin/gradle --no-daemon assembleRelease
 ```
 
@@ -70,7 +71,7 @@ This is a demo, not the final product. Next steps:
 1. Replace the demo ridge model with an ordinal hierarchical model (rater and product random effects, LOO/PPC).
 2. Add a guided experiment mode: repeat / tweak one thing / surprise me, with `pair_id` for paired analysis.
 3. Add measured temperature and a kettle calibration flow.
-4. Add a proper export schema version and migration path.
+4. Add backup validation/checksum and a restore preview; schema v2 and the v1→v2 migration are in place.
 5. Decide whether multi-device rating needs sync or one-device hand-over is enough.
 
 ## Stack

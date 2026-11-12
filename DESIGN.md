@@ -4,20 +4,21 @@
 
 A three-tab mobile app:
 
-1. **Brew** — recipe first, timer second. The 80% case is "same tea, same mug, one tap"; the form is pre-filled from the last recipe. A `Bag in` button starts a timestamp-based timer; `Bag out` stops it and saves a draft. The rating sheet opens immediately.
-2. **History** — the primary queue is "needs a rating", not "most recent". Every brew keeps all of its ratings, so Alex and Ellen can rate the same cup independently.
+1. **Brew** — recipe first, timer second. The 80% case is "same tea, same mug, one tap"; the form is pre-filled from the last recipe. A `Bag in` button starts a timestamp-based timer; `Bag out` stops it and opens a **confirm** sheet for the actuals (milk is often added after the timer). Confirming saves the brew and opens the rating sheet.
+2. **History** — the primary queue is **needs attention**: unconfirmed cups first, then unrated cups, not "most recent". Every brew keeps all of its ratings, so Alex and Ellen can rate the same cup independently.
 3. **Insights** — a demo model, data-health warnings, a time × temperature response surface, the best cup so far, and a 2×3 experiment plan.
 
 ## Data model
 
 ```text
 tea:     id, brand, product, type, bagMassG, bagFormat, targetTempC, targetSteepS
-brew:    id, ts, teaId, waterMl, milkMl, tempC, steepS, handling, preheat, notes
+brew:    id, ts, teaId, teaSnapshot, waterMl, milkMl, tempC, steepS,
+         handling, preheat, notes, confirmed
 rating:  id, ts, rater, overall(1-7), strength(-1/0/1), bitterness(-1/0/1),
          milk(-1/0/1), wouldRepeat, blinded
 ```
 
-Ratings are one-to-many from brews. The tea product, not the brand, is the unit. Derived features:
+`teaSnapshot` is the tea identity at brew time (`brand, product, type, bagMassG, bagFormat, targetTempC, targetSteepS`). It means editing or deleting a tea never rewrites or breaks history. Ratings are one-to-many from brews. The tea product, not the brand, is the unit. Derived features:
 
 - concentration = bag mass × bags / water volume (g/L)
 - milk fraction = milk / (water + milk)
@@ -25,7 +26,13 @@ Ratings are one-to-many from brews. The tea product, not the brand, is the unit.
 
 ## Rating
 
-The sheet hides the parameters until save. That is a cheap blind. Alex cannot fully blind himself (he just made the cup), but Ellen can use the same sheet without seeing the recipe. The 1–7 overall score is paired with direction-giving tags; a scalar alone cannot tell the model whether to add time, reduce milk, or change temperature.
+The confirm sheet shows the actuals and is the place to correct them; the rating sheet then hides the parameters until save. That is a cheap blind. Alex cannot fully blind himself (he just made the cup), but Ellen can use the same rating sheet without seeing the recipe. The 1–7 overall score is paired with direction-giving tags; a scalar alone cannot tell the model whether to add time, reduce milk, or change temperature.
+
+## Actuals flow
+
+- **While steeping** — `Edit actuals` opens the same field set and writes back to the active brew; the timer keeps running.
+- **At bag-out** — the brew is saved as unconfirmed and a confirm sheet opens. `Confirm & rate` saves the actuals and opens the rating sheet; `Save without rating` confirms without rating; `Discard` removes the cup. Closing the sheet leaves the cup in History under **needs attention** so it can be confirmed later.
+- **After saving** — a brew's recipe can be corrected from its detail sheet; this edits the brew record, not the tea library.
 
 ## Model (demo)
 

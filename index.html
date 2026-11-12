@@ -184,6 +184,16 @@
   .danger{color:var(--danger)}
   .data-btn{width:100%;text-align:left;border:1px solid var(--line);background:#fffdf8;border-radius:12px;padding:12px 13px;font-size:12.5px;font-weight:700;margin-bottom:7px;display:flex;justify-content:space-between;align-items:center}
   .data-btn span{color:var(--muted);font-weight:500;font-size:10.5px}
+  .library-row{display:flex;align-items:center;gap:10px;padding:12px 0;border-top:1px solid var(--line)}
+  .library-row:first-of-type{border-top:0;padding-top:4px}
+  .library-main{flex:1;min-width:0}
+  .library-actions{display:flex;gap:6px;flex:0 0 auto}
+  .mini-btn{border:1px solid var(--line);background:#fffdf8;border-radius:9px;padding:7px 9px;font-size:10px;font-weight:800;color:var(--muted)}
+  .mini-btn.danger{color:var(--danger);border-color:#e6c6bd}
+  .warn-banner{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--amber-soft);border:1px solid #e6d2ae;border-radius:12px;padding:10px 12px;font-size:11.5px;color:#7a4e1b;margin:4px 0 10px}
+  .actual-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .actual-grid .field{margin-bottom:8px}
+  .actual-grid input{text-align:center;font-size:16px;font-weight:800;padding-left:6px;padding-right:6px}
   .toast{position:fixed;left:50%;bottom:104px;transform:translateX(-50%) translateY(10px);background:#1f2a24;color:#fff;border-radius:99px;padding:10px 16px;font-size:12px;font-weight:700;opacity:0;pointer-events:none;transition:.22s;z-index:80;max-width:88vw;text-align:center}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   @media (min-width:600px){
@@ -276,6 +286,9 @@ function fmtDate(ts) {
 function toast(msg) {
   const el = $('#toast');
   el.textContent = msg;
+  const onSheet = !!ui.sheet;
+  el.style.top = onSheet ? '14px' : '';
+  el.style.bottom = onSheet ? 'auto' : '';
   el.classList.add('show');
   clearTimeout(el._t);
   el._t = setTimeout(() => el.classList.remove('show'), 2200);
@@ -284,7 +297,7 @@ function toast(msg) {
 /* ---------- state ---------- */
 function freshState() {
   return {
-    version: 1,
+    version: 2,
     teas: clone(DEFAULT_TEAS),
     brews: [],
     settings: {
@@ -297,6 +310,39 @@ function freshState() {
   };
 }
 
+function teaSnapshot(tea) {
+  if (!tea) return {brand:'Tea', product:'', type:'black', bagMassG:2, bagFormat:'paper', targetTempC:95, targetSteepS:180};
+  return {
+    brand: tea.brand,
+    product: tea.product,
+    type: tea.type,
+    bagMassG: Number(tea.bagMassG) || 2,
+    bagFormat: tea.bagFormat || 'paper',
+    targetTempC: Number(tea.targetTempC) || 95,
+    targetSteepS: Number(tea.targetSteepS) || 180
+  };
+}
+
+function brewTea(b) {
+  if (b && b.teaSnapshot) return b.teaSnapshot;
+  const t = getTea(b && b.teaId);
+  return teaSnapshot(t);
+}
+
+function migrateState(s) {
+  if (!s || !Array.isArray(s.teas) || !Array.isArray(s.brews)) return s;
+  s.brews.forEach(b => {
+    if (!b.teaSnapshot) {
+      const t = s.teas.find(x => x.id === b.teaId);
+      if (t) b.teaSnapshot = teaSnapshot(t);
+    }
+    if (!Array.isArray(b.ratings)) b.ratings = [];
+    if (b.confirmed === undefined) b.confirmed = true;
+  });
+  if (!s.version || s.version < 2) s.version = 2;
+  return s;
+}
+
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -305,7 +351,7 @@ function loadState() {
     if (!s || !Array.isArray(s.teas) || !Array.isArray(s.brews)) return freshState();
     s.settings = Object.assign(freshState().settings, s.settings || {});
     if (!Array.isArray(s.settings.raters) || !s.settings.raters.length) s.settings.raters = ['Alex'];
-    return s;
+    return migrateState(s);
   } catch (e) {
     return freshState();
   }
@@ -318,7 +364,13 @@ function saveState() {
 function loadActive() {
   try {
     const raw = localStorage.getItem(ACTIVE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const a = JSON.parse(raw);
+    if (a && !a.teaSnapshot) {
+      const t = state.teas.find(x => x.id === a.teaId);
+      if (t) a.teaSnapshot = teaSnapshot(t);
+    }
+    return a;
   } catch (e) { return null; }
 }
 
@@ -341,7 +393,7 @@ let ui = {
 };
 
 function getTea(id) {
-  return state.teas.find(t => t.id === id) || state.teas[0] || DEFAULT_TEAS[0];
+  return state.teas.find(t => t.id === id) || null;
 }
 
 function defaultRater() {
@@ -364,6 +416,7 @@ let form = (() => {
   }
   if (lr && state.teas.some(t => t.id === lr.teaId)) return Object.assign({}, lr);
   const t = state.teas[0];
+  if (!t) return {teaId: null, waterMl: 250, milkMl: 20, tempC: 95, handling: 'none', preheat: false, notes: '', targetSteepS: 180};
   return {teaId: t.id, waterMl: 250, milkMl: 20, tempC: t.targetTempC, handling: 'none', preheat: false, notes: '', targetSteepS: t.targetSteepS};
 })();
 
@@ -384,8 +437,14 @@ function segHtml(field, value, options) {
 
 /* ---------- BREW VIEW ---------- */
 function renderBrew() {
-  const tea = getTea(form.teaId);
-  const target = Number(form.targetSteepS || tea.targetSteepS || 180);
+  const tea = activeBrew ? brewTea(activeBrew) : getTea(form.teaId);
+  if (!tea) return `
+    <section class="card empty">
+      <h3>No teas yet</h3>
+      <p>Add a tea product to start brewing. You can edit or delete it later in the library.</p>
+      <button class="btn btn-primary btn-small" data-action="add-tea">Add a tea</button>
+    </section>`;
+  const target = Number((activeBrew ? activeBrew.targetSteepS : form.targetSteepS) || tea.targetSteepS || 180);
   const elapsed = activeBrew ? elapsedActive() : 0;
   const pct = clamp(elapsed / target * 100, 0, 100);
 
@@ -402,14 +461,15 @@ function renderBrew() {
         <button class="btn btn-ghost btn-wide btn-small" data-action="discard">Discard this brew</button>
       </section>
       <section class="card">
-        <div class="section-head"><h3>Recipe in progress</h3><span class="pill">${escapeHtml(HANDLING_LABELS[form.handling] || form.handling)}</span></div>
+        <div class="section-head"><h3>Recipe in progress</h3><button class="link" data-action="edit-active">Edit actuals</button></div>
         <div class="detail-grid">
-          <div class="detail-item"><span>Water</span><b>${fmtMl(form.waterMl)}</b></div>
-          <div class="detail-item"><span>Milk</span><b>${form.milkMl ? fmtMl(form.milkMl) : 'None'}</b></div>
-          <div class="detail-item"><span>Temperature</span><b>${form.tempC}°C</b></div>
-          <div class="detail-item"><span>Cup</span><b>${form.preheat ? 'Preheated' : 'Cold'}</b></div>
+          <div class="detail-item"><span>Water</span><b>${fmtMl(activeBrew.waterMl)}</b></div>
+          <div class="detail-item"><span>Milk</span><b>${activeBrew.milkMl ? fmtMl(activeBrew.milkMl) : 'None'}</b></div>
+          <div class="detail-item"><span>Temperature</span><b>${activeBrew.tempC}°C</b></div>
+          <div class="detail-item"><span>Cup</span><b>${activeBrew.preheat ? 'Preheated' : 'Cold'}</b></div>
+          <div class="detail-item"><span>Handling</span><b>${escapeHtml(HANDLING_LABELS[activeBrew.handling] || activeBrew.handling)}</b></div>
         </div>
-        <p class="hint">You can put the phone down — the elapsed time is stored as a timestamp, so it keeps counting even if the screen locks.</p>
+        <p class="hint">You can put the phone down — the elapsed time is stored as a timestamp, so it keeps counting even if the screen locks. If you change the recipe while it steeps, tap “Edit actuals”.</p>
       </section>`;
   }
 
@@ -424,7 +484,7 @@ function renderBrew() {
     </section>
 
     <section class="card">
-      <div class="section-head"><h3>Recipe</h3><div style="display:flex;gap:12px"><button class="link" data-action="add-tea">＋ tea</button><button class="link" data-action="open-settings">settings</button></div></div>
+      <div class="section-head"><h3>Recipe</h3><div style="display:flex;gap:12px"><button class="link" data-action="open-library">library</button><button class="link" data-action="open-settings">settings</button></div></div>
 
       <div class="field">
         <div class="field-label"><label for="tea-select">Tea</label><span class="field-val">${escapeHtml(teaMeta(tea))}</span></div>
@@ -444,6 +504,7 @@ function renderBrew() {
         <div class="field-label"><label for="milk">Milk</label><span class="field-val"><b id="out-milk">${Math.round(form.milkMl)}</b> ml</span></div>
         <input id="milk" type="range" min="0" max="80" step="5" value="${form.milkMl}" data-form="milkMl">
         <div class="derived"><span class="pill">Milk fraction <b id="out-milkfrac">${fmtPct(form.milkMl / (form.waterMl + form.milkMl))}</b></span></div>
+        <p class="hint">Milk added after the timer? Put the planned amount here, then enter the weighed volume on the confirm screen.</p>
       </div>
 
       <div class="field">
@@ -495,23 +556,33 @@ function ensureTick() {
     if (clock) clock.textContent = `${fmtSteep(el2)} elapsed`;
     const bar = $('#timer-progress');
     if (bar) {
-      const tea = getTea(activeBrew.teaId);
+      const tea = brewTea(activeBrew);
       const target = Number(activeBrew.targetSteepS || tea.targetSteepS || 180);
       bar.style.width = clamp(el2 / target * 100, 0, 100) + '%';
       bar.classList.toggle('over', el2 > target);
+    }
+    const ac = $('#actuals-clock');
+    if (ac) {
+      const tea = brewTea(activeBrew);
+      const target = Number(activeBrew.targetSteepS || tea.targetSteepS || 180);
+      ac.textContent = `${fmtSteep(el2)} / ${fmtSteep(target)}`;
     }
   }, 250);
 }
 
 function startBrew() {
   if (activeBrew) return;
+  const tea = getTea(form.teaId);
+  if (!tea) return toast('Add a tea first');
   if (Number(form.waterMl) < 100) return toast('Add at least 100 ml of water');
   state.settings.lastRecipe = clone(form);
   saveState();
   activeBrew = {
-    teaId: form.teaId, waterMl: Number(form.waterMl), milkMl: Number(form.milkMl),
+    teaId: tea.id,
+    teaSnapshot: teaSnapshot(tea),
+    waterMl: Number(form.waterMl), milkMl: Number(form.milkMl),
     tempC: Number(form.tempC), handling: form.handling, preheat: !!form.preheat,
-    notes: form.notes || '', targetSteepS: Number(form.targetSteepS || getTea(form.teaId).targetSteepS || 180),
+    notes: form.notes || '', targetSteepS: Number(form.targetSteepS || tea.targetSteepS || 180),
     startedAt: Date.now()
   };
   saveActive();
@@ -522,10 +593,12 @@ function startBrew() {
 function stopBrew() {
   if (!activeBrew) return;
   const steepS = Math.max(1, Math.round((Date.now() - activeBrew.startedAt) / 1000));
+  const tea = brewTea(activeBrew);
   const brew = {
     id: uid(),
     ts: Date.now(),
     teaId: activeBrew.teaId,
+    teaSnapshot: teaSnapshot(tea),
     waterMl: Number(activeBrew.waterMl),
     milkMl: Number(activeBrew.milkMl),
     tempC: Number(activeBrew.tempC),
@@ -533,14 +606,15 @@ function stopBrew() {
     handling: activeBrew.handling,
     preheat: !!activeBrew.preheat,
     notes: activeBrew.notes || '',
+    confirmed: false,
     ratings: []
   };
   state.brews.push(brew);
   activeBrew = null;
   saveActive();
   saveState();
-  openRating(brew.id);
-  toast('Brew saved — rate it while it is fresh');
+  ui.sheet = {type: 'confirm', brewId: brew.id, mode: 'confirm', draft: confirmDraft(brew)};
+  render();
 }
 
 function discardActive() {
@@ -552,12 +626,256 @@ function discardActive() {
   toast('Brew discarded');
 }
 
+/* ---------- ACTUALS / CONFIRM ---------- */
+function confirmDraft(brew) {
+  return {
+    waterMl: Number(brew.waterMl) || 0,
+    milkMl: Number(brew.milkMl) || 0,
+    tempC: Number(brew.tempC) || 95,
+    handling: brew.handling || 'none',
+    preheat: !!brew.preheat,
+    notes: brew.notes || ''
+  };
+}
+
+function openConfirm(brewId) {
+  const brew = state.brews.find(b => b.id === brewId);
+  if (!brew) return;
+  ui.sheet = {
+    type: 'confirm',
+    brewId,
+    mode: brew.confirmed === false ? 'confirm' : 'edit',
+    draft: confirmDraft(brew)
+  };
+  render();
+}
+
+function openActiveActuals() {
+  if (!activeBrew) return;
+  ui.sheet = {
+    type: 'actuals',
+    draft: {
+      waterMl: Number(activeBrew.waterMl) || 0,
+      milkMl: Number(activeBrew.milkMl) || 0,
+      tempC: Number(activeBrew.tempC) || 95,
+      handling: activeBrew.handling || 'none',
+      preheat: !!activeBrew.preheat,
+      notes: activeBrew.notes || ''
+    }
+  };
+  render();
+}
+
+function setConfirmField(field, value) {
+  if (!ui.sheet || (ui.sheet.type !== 'confirm' && ui.sheet.type !== 'actuals')) return;
+  ui.sheet.draft[field] = value;
+  renderSheetOnly();
+}
+
+function updateActualDerived() {
+  const s = ui.sheet;
+  if (!s || !s.draft || (s.type !== 'confirm' && s.type !== 'actuals')) return;
+  let tea = null;
+  if (s.type === 'confirm') {
+    const b = state.brews.find(x => x.id === s.brewId);
+    tea = b ? brewTea(b) : null;
+  } else if (activeBrew) {
+    tea = brewTea(activeBrew);
+  }
+  if (!tea) return;
+  const d = s.draft;
+  const water = Number(d.waterMl) || 0;
+  const milk = Number(d.milkMl) || 0;
+  const total = water + milk;
+  const conc = round1((Number(tea.bagMassG) || 2) / Math.max(1, water) * 1000);
+  const mf = total > 0 ? fmtPct(milk / total) : '0%';
+  if ($('#confirm-conc')) $('#confirm-conc').textContent = conc;
+  if ($('#confirm-total')) $('#confirm-total').textContent = Math.round(total);
+  if ($('#confirm-mf')) $('#confirm-mf').textContent = mf;
+}
+
+function applyConfirmDraft(brew) {
+  const d = ui.sheet.draft;
+  brew.waterMl = Number(d.waterMl) || 0;
+  brew.milkMl = Number(d.milkMl) || 0;
+  brew.tempC = Number(d.tempC) || brew.tempC;
+  brew.handling = d.handling || 'none';
+  brew.preheat = !!d.preheat;
+  brew.notes = d.notes || '';
+}
+
+function confirmAndRate() {
+  const s = ui.sheet;
+  if (!s || s.type !== 'confirm') return;
+  const brew = state.brews.find(b => b.id === s.brewId);
+  if (!brew) return;
+  applyConfirmDraft(brew);
+  brew.confirmed = true;
+  saveState();
+  ui.sheet = null;
+  openRating(brew.id);
+}
+
+function confirmSave() {
+  const s = ui.sheet;
+  if (!s || s.type !== 'confirm') return;
+  const brew = state.brews.find(b => b.id === s.brewId);
+  if (!brew) return;
+  applyConfirmDraft(brew);
+  if (s.mode !== 'edit') brew.confirmed = true;
+  saveState();
+  const wasEdit = s.mode === 'edit';
+  ui.sheet = null;
+  render();
+  toast(wasEdit ? 'Recipe updated' : 'Cup saved without a rating');
+}
+
+function confirmDiscard() {
+  const s = ui.sheet;
+  if (!s || s.type !== 'confirm') return;
+  if (!confirm('Discard this cup? It will not be saved.')) return;
+  state.brews = state.brews.filter(b => b.id !== s.brewId);
+  saveState();
+  ui.sheet = null;
+  render();
+  toast('Cup discarded');
+}
+
+function saveActiveActuals() {
+  if (!ui.sheet || ui.sheet.type !== 'actuals' || !activeBrew) return;
+  const d = ui.sheet.draft;
+  activeBrew.waterMl = Number(d.waterMl) || 0;
+  activeBrew.milkMl = Number(d.milkMl) || 0;
+  activeBrew.tempC = Number(d.tempC) || activeBrew.tempC;
+  activeBrew.handling = d.handling || 'none';
+  activeBrew.preheat = !!d.preheat;
+  activeBrew.notes = d.notes || '';
+  form.waterMl = activeBrew.waterMl;
+  form.milkMl = activeBrew.milkMl;
+  form.tempC = activeBrew.tempC;
+  form.handling = activeBrew.handling;
+  form.preheat = activeBrew.preheat;
+  form.notes = activeBrew.notes;
+  state.settings.lastRecipe = clone(form);
+  saveActive();
+  saveState();
+  ui.sheet = null;
+  render();
+  toast('Actuals updated');
+}
+
+function actualFieldsHtml(d, tea) {
+  const total = Number(d.waterMl || 0) + Number(d.milkMl || 0);
+  const conc = round1((Number(tea.bagMassG) || 2) / Math.max(1, Number(d.waterMl || 0)) * 1000);
+  const mf = total > 0 ? fmtPct(Number(d.milkMl || 0) / total) : '0%';
+  return `
+    <div class="actual-grid">
+      <div class="field">
+        <div class="field-label"><label>Water (ml)</label></div>
+        <input type="number" inputmode="numeric" step="1" min="0" max="500" data-confirm="waterMl" value="${Number(d.waterMl) || 0}">
+      </div>
+      <div class="field">
+        <div class="field-label"><label>Milk (ml)</label></div>
+        <input type="number" inputmode="decimal" step="1" min="0" max="200" data-confirm="milkMl" value="${Number(d.milkMl) || 0}">
+      </div>
+      <div class="field">
+        <div class="field-label"><label>Temp (°C)</label></div>
+        <input type="number" inputmode="numeric" step="1" min="40" max="100" data-confirm="tempC" value="${Number(d.tempC) || 95}">
+      </div>
+    </div>
+    <div class="derived">
+      <span class="pill">Concentration <b id="confirm-conc">${conc}</b> g/L</span>
+      <span class="pill">Total <b id="confirm-total">${Math.round(total)}</b> ml</span>
+      <span class="pill">Milk <b id="confirm-mf">${mf}</b></span>
+    </div>
+    <div class="field">
+      <div class="field-label"><span class="lab">Bag handling</span></div>
+      <div class="seg">
+        ${['none','dunk','squeeze'].map(h => `<button type="button" data-action="set-confirm" data-field="handling" data-value="${h}" class="${d.handling === h ? 'active' : ''}">${HANDLING_LABELS[h]}</button>`).join('')}
+      </div>
+    </div>
+    <div class="field">
+      <div class="switch-row">
+        <div><div class="field-label" style="margin:0"><span class="lab">Preheat the cup</span></div></div>
+        <label class="switch"><input type="checkbox" data-confirm="preheat" ${d.preheat ? 'checked' : ''}><span></span></label>
+      </div>
+    </div>
+    <div class="field">
+      <div class="field-label"><label>Notes</label></div>
+      <textarea data-confirm="notes" placeholder="Bag split, milk added after, distracted…">${escapeHtml(d.notes || '')}</textarea>
+    </div>`;
+}
+
+function confirmSheetHtml() {
+  const s = ui.sheet;
+  const brew = state.brews.find(b => b.id === s.brewId);
+  if (!brew) return '';
+  const tea = brewTea(brew);
+  const d = s.draft;
+  const mode = s.mode || 'confirm';
+  const title = mode === 'confirm' ? 'Confirm the cup' : 'Edit the recipe';
+  return `
+    <div class="overlay" data-action="close-sheet">
+      <div class="sheet" role="dialog" aria-modal="true" aria-label="${title}">
+        <div class="sheet-head">
+          <div>
+            <div class="eyebrow">${mode === 'confirm' ? 'Cup ready' : 'Actuals'}</div>
+            <h2>${title}</h2>
+            <p class="muted" style="font-size:11px;margin:0">${escapeHtml(teaName(tea))} · steep ${fmtSteep(brew.steepS)}</p>
+          </div>
+          <button class="sheet-close" data-action="close-sheet" aria-label="Close">✕</button>
+        </div>
+        <p class="hint" style="margin-top:0">${mode === 'confirm' ? 'Set the actuals before saving. If the milk went in after the timer, weigh it now and enter the volume.' : 'Correct anything that changed during the brew.'}</p>
+        ${actualFieldsHtml(d, tea)}
+        ${mode === 'confirm' ? `
+          <button class="btn btn-primary btn-wide" data-action="confirm-and-rate">Confirm & rate</button>
+          <div style="height:8px"></div>
+          <button class="btn btn-soft btn-wide" data-action="confirm-save">Save without rating</button>
+          <div style="height:8px"></div>
+          <button class="btn btn-ghost btn-wide btn-small" data-action="confirm-discard">Discard this cup</button>
+        ` : `
+          <button class="btn btn-primary btn-wide" data-action="confirm-save">Save changes</button>
+          <div style="height:8px"></div>
+          ${!brew.ratings.length ? `<button class="btn btn-soft btn-wide" data-action="confirm-and-rate">Save & rate</button>` : ''}
+        `}
+      </div>
+    </div>`;
+}
+
+function actualsSheetHtml() {
+  if (!activeBrew) return '';
+  const d = ui.sheet.draft;
+  const tea = brewTea(activeBrew);
+  const target = Number(activeBrew.targetSteepS || tea.targetSteepS || 180);
+  return `
+    <div class="overlay" data-action="close-sheet">
+      <div class="sheet" role="dialog" aria-modal="true" aria-label="Edit actuals">
+        <div class="sheet-head">
+          <div>
+            <div class="eyebrow">While it steeps</div>
+            <h2>Edit actuals</h2>
+            <p class="muted" style="font-size:11px;margin:0">${escapeHtml(teaName(tea))} · <span id="actuals-clock">${fmtSteep(elapsedActive())} / ${fmtSteep(target)}</span></p>
+          </div>
+          <button class="sheet-close" data-action="close-sheet" aria-label="Close">✕</button>
+        </div>
+        <p class="hint" style="margin-top:0">The timer keeps running. Change anything that no longer matches the cup — the saved brew will use these actuals.</p>
+        ${actualFieldsHtml(d, tea)}
+        <button class="btn btn-primary btn-wide" data-action="save-active">Save actuals</button>
+        <div style="height:8px"></div>
+        <button class="btn btn-ghost btn-wide btn-small" data-action="close-sheet">Cancel</button>
+      </div>
+    </div>`;
+}
+
 /* ---------- HISTORY VIEW ---------- */
 function renderHistory() {
   const brews = state.brews.slice().sort((a, b) => b.ts - a.ts);
-  const unrated = brews.filter(b => !b.ratings || !b.ratings.length);
+  const unconfirmed = brews.filter(b => b.confirmed === false);
+  const unrated = brews.filter(b => b.confirmed !== false && (!b.ratings || !b.ratings.length));
+  const needs = unconfirmed.length + unrated.length;
   const filter = ui.historyFilter;
-  const shown = brews.filter(b => filter === 'all' ? true : filter === 'unrated' ? (!b.ratings || !b.ratings.length) : (b.ratings && b.ratings.length));
+  const shown = brews.filter(b => filter === 'all' ? true : filter === 'needs' ? (b.confirmed === false || !b.ratings || !b.ratings.length) : (b.confirmed !== false && b.ratings && b.ratings.length));
+  const ratedCount = brews.filter(b => b.confirmed !== false && b.ratings && b.ratings.length).length;
 
   return `
     <section class="card tight">
@@ -567,41 +885,52 @@ function renderHistory() {
       </div>
       <div class="chip-row">
         <button class="chip ${filter === 'all' ? 'active' : ''}" data-action="filter" data-filter="all">All ${brews.length}</button>
-        <button class="chip ${filter === 'unrated' ? 'active' : ''}" data-action="filter" data-filter="unrated">Needs rating ${unrated.length}</button>
-        <button class="chip ${filter === 'rated' ? 'active' : ''}" data-action="filter" data-filter="rated">Rated ${brews.length - unrated.length}</button>
+        <button class="chip ${filter === 'needs' ? 'active' : ''}" data-action="filter" data-filter="needs">Needs attention ${needs}</button>
+        <button class="chip ${filter === 'rated' ? 'active' : ''}" data-action="filter" data-filter="rated">Rated ${ratedCount}</button>
       </div>
     </section>
 
-    ${unrated.length && filter !== 'rated' ? `
+    ${needs && filter !== 'rated' ? `
       <section class="card tight">
-        <div class="section-head" style="margin-bottom:10px"><h3>Needs a rating</h3><span class="pill">${unrated.length} waiting</span></div>
-        ${unrated.slice(0, 6).map(b => brewCard(b, true)).join('')}
-        ${unrated.length > 6 ? `<p class="hint">Showing the 6 most recent unrated cups.</p>` : ''}
+        <div class="section-head" style="margin-bottom:10px"><h3>Needs attention</h3><span class="pill">${needs} waiting</span></div>
+        ${[...unconfirmed, ...unrated].sort((a, b) => b.ts - a.ts).slice(0, 6).map(b => brewCard(b, true)).join('')}
+        ${needs > 6 ? `<p class="hint">Showing the 6 most recent cups.</p>` : ''}
       </section>` : ''}
 
     <section class="card tight">
-      <div class="section-head" style="margin-bottom:10px"><h3>${filter === 'unrated' ? 'Unrated' : filter === 'rated' ? 'Rated' : 'Most recent'}</h3><span class="pill">${shown.length} cups</span></div>
+      <div class="section-head" style="margin-bottom:10px"><h3>${filter === 'needs' ? 'Needs attention' : filter === 'rated' ? 'Rated' : 'Most recent'}</h3><span class="pill">${shown.length} cups</span></div>
       ${shown.length ? shown.map(b => brewCard(b, false)).join('') : `<div class="empty"><h3>No cups here yet</h3><p>Start a brew and it will appear in this list.</p><button class="btn btn-soft btn-small" data-action="tab" data-tab="brew">Brew a cup</button></div>`}
     </section>`;
 }
 
-function brewCard(b, showRate) {
-  const tea = getTea(b.teaId);
+function brewCard(b, showAction) {
+  const tea = brewTea(b);
+  let side = ratingBadge(b);
+  if (showAction) {
+    if (b.confirmed === false) side = `<button class="rate-btn" data-action="confirm-brew" data-id="${b.id}">Confirm</button>`;
+    else if (!b.ratings || !b.ratings.length) side = `<button class="rate-btn" data-action="rate" data-id="${b.id}">Rate</button>`;
+  } else if (b.confirmed === false) {
+    side = `<span class="pill" style="color:#8a531a;background:var(--amber-soft);border-color:#e6d2ae">Confirm</span>`;
+  }
   return `
     <article class="brew-card" data-action="open-detail" data-id="${b.id}">
       <div class="brew-main">
         <div class="brew-title">${escapeHtml(teaName(tea))}</div>
         <div class="brew-meta">${fmtDate(b.ts)} · ${fmtSteep(b.steepS)} · ${b.tempC}°C · ${b.waterMl} ml${b.milkMl ? ` + ${b.milkMl} ml milk` : ''}</div>
       </div>
-      <div class="brew-side">
-        ${showRate && (!b.ratings || !b.ratings.length) ? `<button class="rate-btn" data-action="rate" data-id="${b.id}">Rate</button>` : ratingBadge(b)}
-      </div>
+      <div class="brew-side">${side}</div>
     </article>`;
 }
 
 /* ---------- INSIGHTS VIEW ---------- */
 function renderInsights() {
   const tea = getInsightTea();
+  if (!tea) return `
+    <section class="card empty">
+      <h3>No teas yet</h3>
+      <p>Add a tea product, then log a few cups to see what drives the rating.</p>
+      <button class="btn btn-primary btn-small" data-action="add-tea">Add a tea</button>
+    </section>`;
   const rater = ui.insightRater || defaultRater();
   const obs = observationsFor(tea.id, rater);
 
@@ -634,10 +963,14 @@ function renderInsights() {
 }
 
 function getInsightTea() {
-  if (ui.insightTeaId) return getTea(ui.insightTeaId);
-  const counts = state.teas.map(t => ({t, n: state.brews.filter(b => b.teaId === t.id && b.ratings.length).length}));
+  if (ui.insightTeaId) {
+    const t = getTea(ui.insightTeaId);
+    if (t) return t;
+    ui.insightTeaId = null;
+  }
+  const counts = state.teas.map(t => ({t, n: state.brews.filter(b => b.teaId === t.id && b.ratings && b.ratings.length).length}));
   counts.sort((a, b) => b.n - a.n);
-  return counts[0] && counts[0].n ? counts[0].t : state.teas[0];
+  return counts[0] && counts[0].n ? counts[0].t : (state.teas[0] || null);
 }
 
 function observationsFor(teaId, rater) {
@@ -655,7 +988,7 @@ function renderModel(tea, rater, obs) {
   const model = fitModel(obs, tea);
   if (!model) return '';
   const bestObs = obs.slice().sort((a, b) => (b.rating.overall - a.rating.overall) || (b.brew.ts - a.brew.ts))[0];
-  const bestTea = getTea(bestObs.brew.teaId);
+  const bestTea = brewTea(bestObs.brew);
   const plan = makePlan(model, tea, obs);
 
   const warnings = dataWarnings(obs);
@@ -719,7 +1052,7 @@ function dataWarnings(obs) {
   const times = obs.map(o => Math.log(Math.max(30, o.brew.steepS)));
   const milks = obs.map(o => Number(o.brew.milkMl || 0) / Math.max(1, Number(o.brew.waterMl) + Number(o.brew.milkMl || 0)));
   const concs = obs.map(o => {
-    const tea = getTea(o.brew.teaId);
+    const tea = brewTea(o.brew);
     return (Number(tea.bagMassG) / Math.max(1, Number(o.brew.waterMl))) * 1000;
   });
   const range = a => Math.max(...a) - Math.min(...a);
@@ -751,7 +1084,8 @@ function featureVector(b, tea) {
   const centerTemp = green ? 78 : 93;
   const lt = Math.log(Math.max(30, Number(b.steepS))) - centerTime;
   const temp = Number(b.tempC) - centerTemp;
-  const conc = (Number(tea.bagMassG) / Math.max(1, Number(b.waterMl))) * 1000;
+  const bagMass = Number((b.teaSnapshot && b.teaSnapshot.bagMassG) || tea.bagMassG) || 2;
+  const conc = (bagMass / Math.max(1, Number(b.waterMl))) * 1000;
   const milkFrac = Number(b.milkMl || 0) / Math.max(1, Number(b.waterMl) + Number(b.milkMl || 0));
   return [lt, temp, lt * lt, temp * temp, conc, milkFrac, b.handling === 'squeeze' ? 1 : 0, b.handling === 'dunk' ? 1 : 0, b.preheat ? 1 : 0];
 }
@@ -984,6 +1318,7 @@ function makePlan(model, tea, obs) {
 function openRating(brewId, ratingId = null) {
   const brew = state.brews.find(b => b.id === brewId);
   if (!brew) return;
+  if (brew.confirmed === false) { openConfirm(brew.id); return; }
   const existing = ratingId ? brew.ratings.find(r => r.id === ratingId) : null;
   ui.sheet = {
     type: 'rating',
@@ -1001,7 +1336,7 @@ function ratingSheetHtml() {
   const s = ui.sheet;
   const brew = state.brews.find(b => b.id === s.brewId);
   if (!brew) return '';
-  const tea = getTea(brew.teaId);
+  const tea = brewTea(brew);
   const d = s.draft;
   const hasMilk = Number(brew.milkMl) > 0;
   return `
@@ -1101,7 +1436,7 @@ function openDetail(brewId) {
 function detailSheetHtml() {
   const brew = state.brews.find(b => b.id === ui.sheet.brewId);
   if (!brew) return '';
-  const tea = getTea(brew.teaId);
+  const tea = brewTea(brew);
   const conc = round1((tea.bagMassG / brew.waterMl) * 1000);
   const milkFrac = brew.milkMl ? fmtPct(brew.milkMl / (brew.waterMl + brew.milkMl)) : 'None';
   return `
@@ -1115,6 +1450,8 @@ function detailSheetHtml() {
           </div>
           <button class="sheet-close" data-action="close-sheet" aria-label="Close">✕</button>
         </div>
+
+        ${brew.confirmed === false ? `<div class="warn-banner"><span>This cup has not been confirmed.</span><button class="mini-btn" data-action="confirm-brew" data-id="${brew.id}">Confirm recipe</button></div>` : ''}
 
         <div class="detail-grid">
           <div class="detail-item"><span>Steep</span><b>${fmtSteep(brew.steepS)}</b></div>
@@ -1153,8 +1490,14 @@ function detailSheetHtml() {
 function brewAgain(id) {
   const b = state.brews.find(x => x.id === id);
   if (!b) return;
+  let tea = state.teas.find(t => t.id === b.teaId);
+  if (!tea && b.teaSnapshot) {
+    tea = Object.assign({id: b.teaId || ('tea-' + uid())}, b.teaSnapshot);
+    state.teas.push(tea);
+  }
+  if (!tea) return toast('That tea is no longer in the library');
   form = {
-    teaId: b.teaId, waterMl: b.waterMl, milkMl: b.milkMl, tempC: b.tempC,
+    teaId: tea.id, waterMl: b.waterMl, milkMl: b.milkMl, tempC: b.tempC,
     handling: b.handling, preheat: b.preheat, notes: '', targetSteepS: b.steepS
   };
   state.settings.lastRecipe = clone(form);
@@ -1198,6 +1541,11 @@ function settingsSheetHtml() {
         </div>
 
         <div class="setting-group">
+          <label>Tea library</label>
+          <button class="data-btn" data-action="open-library">Manage teas <span>edit times / delete</span></button>
+        </div>
+
+        <div class="setting-group">
           <label>Water (house constant)</label>
           <div class="inline" style="gap:8px">
             <input type="number" step="1" min="0" data-setting="waterHardnessPpm" value="${s.waterHardnessPpm ?? ''}" placeholder="Hardness ppm">
@@ -1220,54 +1568,85 @@ function settingsSheetHtml() {
     </div>`;
 }
 
-function teaSheetHtml() {
+function librarySheetHtml() {
   return `
     <div class="overlay" data-action="close-sheet">
-      <div class="sheet" role="dialog" aria-modal="true" aria-label="Add a tea">
+      <div class="sheet" role="dialog" aria-modal="true" aria-label="Tea library">
         <div class="sheet-head">
-          <div><div class="eyebrow">Tea library</div><h2>Add a tea</h2><p class="muted" style="font-size:11px;margin:0">Brand, product and bag mass — not brand alone.</p></div>
+          <div><div class="eyebrow">Tea library</div><h2>Your teas</h2><p class="muted" style="font-size:11px;margin:0">Edit suggested temp and time, or delete a tea. History keeps a snapshot.</p></div>
           <button class="sheet-close" data-action="close-sheet" aria-label="Close">✕</button>
         </div>
+        ${state.teas.length ? state.teas.map(t => `
+          <div class="library-row">
+            <div class="library-main">
+              <div class="brew-title">${escapeHtml(teaName(t))}</div>
+              <div class="brew-meta">${escapeHtml(teaMeta(t))} · ${t.targetTempC}°C · ${fmtSteep(t.targetSteepS)}</div>
+            </div>
+            <div class="library-actions">
+              <button class="mini-btn" data-action="edit-tea" data-id="${t.id}">Edit</button>
+              <button class="mini-btn danger" data-action="delete-tea" data-id="${t.id}">Delete</button>
+            </div>
+          </div>`).join('') : `<div class="empty" style="padding:18px 12px"><p>No teas yet. Add the first bag.</p></div>`}
+        <button class="btn btn-primary btn-wide" data-action="add-tea" style="margin-top:10px">Add a tea</button>
+      </div>
+    </div>`;
+}
+
+function teaSheetHtml() {
+  const s = ui.sheet;
+  const tea = s.editId ? state.teas.find(t => t.id === s.editId) : null;
+  const editing = !!tea;
+  const type = tea ? tea.type : 'black';
+  const format = tea ? tea.bagFormat : 'paper';
+  return `
+    <div class="overlay" data-action="close-sheet">
+      <div class="sheet" role="dialog" aria-modal="true" aria-label="${editing ? 'Edit tea' : 'Add a tea'}">
+        <div class="sheet-head">
+          <div><div class="eyebrow">Tea library</div><h2>${editing ? 'Edit tea' : 'Add a tea'}</h2><p class="muted" style="font-size:11px;margin:0">Brand, product and bag mass — not brand alone.</p></div>
+          <button class="sheet-close" data-action="close-sheet" aria-label="Close">✕</button>
+        </div>
+        <button class="link" data-action="open-library" style="margin:0 0 8px;align-self:flex-start">← Library</button>
         <div class="field">
           <div class="field-label"><label for="tea-brand">Brand</label></div>
-          <input id="tea-brand" type="text" placeholder="e.g. Yorkshire Tea">
+          <input id="tea-brand" type="text" placeholder="e.g. Yorkshire Tea" value="${escapeHtml(tea ? tea.brand : '')}">
         </div>
         <div class="field">
           <div class="field-label"><label for="tea-product">Product / blend</label></div>
-          <input id="tea-product" type="text" placeholder="e.g. Gold">
+          <input id="tea-product" type="text" placeholder="e.g. Gold" value="${escapeHtml(tea ? tea.product : '')}">
         </div>
         <div class="field">
           <div class="field-label"><label for="tea-type">Tea type</label></div>
-          <select id="tea-type">${TEA_TYPES.map(t => `<option value="${t}">${t}</option>`).join('')}</select>
+          <select id="tea-type">${TEA_TYPES.map(t => `<option value="${t}" ${t === type ? 'selected' : ''}>${t}</option>`).join('')}</select>
         </div>
         <div class="field">
           <div class="field-label"><label for="tea-mass">Bag mass</label><span class="field-val">grams</span></div>
-          <input id="tea-mass" type="number" step="0.1" min="0.5" max="10" value="3.0">
+          <input id="tea-mass" type="number" step="0.1" min="0.5" max="10" value="${tea ? tea.bagMassG : 3.0}">
         </div>
         <div class="field">
           <div class="field-label"><label for="tea-format">Bag format</label></div>
-          <select id="tea-format"><option value="paper">paper</option><option value="mesh">mesh</option><option value="pyramid">pyramid</option><option value="loose">loose</option></select>
+          <select id="tea-format">${['paper','mesh','pyramid','loose'].map(f => `<option value="${f}" ${f === format ? 'selected' : ''}>${f}</option>`).join('')}</select>
         </div>
         <div class="field">
           <div class="field-label"><label for="tea-temp">Suggested temperature</label><span class="field-val">°C</span></div>
-          <input id="tea-temp" type="number" step="1" min="60" max="100" value="95">
+          <input id="tea-temp" type="number" step="1" min="60" max="100" value="${tea ? tea.targetTempC : 95}">
         </div>
         <div class="field">
           <div class="field-label"><label for="tea-steep">Suggested steep</label><span class="field-val">seconds</span></div>
-          <input id="tea-steep" type="number" step="5" min="30" max="600" value="180">
+          <input id="tea-steep" type="number" step="5" min="30" max="600" value="${tea ? tea.targetSteepS : 180}">
         </div>
-        <button class="btn btn-primary btn-wide" data-action="save-tea">Add to library</button>
+        <button class="btn btn-primary btn-wide" data-action="save-tea">${editing ? 'Save changes' : 'Add to library'}</button>
         <p class="hint" style="text-align:center">Bag mass is the hidden confound: 2g and 3.2g bags are not the same tea at the same volume.</p>
       </div>
     </div>`;
 }
 
 function saveTea() {
+  const s = ui.sheet;
+  const editId = s && s.editId;
   const brand = ($('#tea-brand')?.value || '').trim();
   const product = ($('#tea-product')?.value || '').trim();
   if (!brand || !product) return toast('Add a brand and a product');
-  const tea = {
-    id: 'tea-' + uid(),
+  const payload = {
     brand, product,
     type: $('#tea-type').value,
     bagMassG: Number($('#tea-mass').value) || 2,
@@ -1275,6 +1654,26 @@ function saveTea() {
     targetTempC: Number($('#tea-temp').value) || 95,
     targetSteepS: Number($('#tea-steep').value) || 180
   };
+
+  if (editId) {
+    const tea = state.teas.find(t => t.id === editId);
+    if (!tea) return;
+    const oldTemp = tea.targetTempC;
+    const oldSteep = tea.targetSteepS;
+    Object.assign(tea, payload);
+    if (form.teaId === tea.id && !activeBrew) {
+      if (Number(form.tempC) === Number(oldTemp)) form.tempC = tea.targetTempC;
+      if (Number(form.targetSteepS) === Number(oldSteep)) form.targetSteepS = tea.targetSteepS;
+      state.settings.lastRecipe = clone(form);
+    }
+    saveState();
+    ui.sheet = {type: 'library'};
+    render();
+    toast(`${tea.brand} ${tea.product} updated`);
+    return;
+  }
+
+  const tea = Object.assign({id: 'tea-' + uid()}, payload);
   state.teas.push(tea);
   form.teaId = tea.id;
   form.tempC = tea.targetTempC;
@@ -1282,9 +1681,37 @@ function saveTea() {
   if (tea.type === 'green' || tea.type === 'herbal') form.milkMl = 0;
   state.settings.lastRecipe = clone(form);
   saveState();
-  ui.sheet = null;
+  ui.sheet = {type: 'library'};
   render();
   toast(`${tea.brand} ${tea.product} added`);
+}
+
+function deleteTea(id) {
+  const tea = state.teas.find(t => t.id === id);
+  if (!tea) return;
+  const n = state.brews.filter(b => b.teaId === id).length;
+  if (!confirm(`Delete ${tea.brand} ${tea.product}?${n ? ` Its ${n} brew${n === 1 ? '' : 's'} ${n === 1 ? 'stays' : 'stay'} in history with a snapshot.` : ''}`)) return;
+  state.teas = state.teas.filter(t => t.id !== id);
+  if (form.teaId === id) {
+    const next = state.teas[0];
+    if (next) {
+      form.teaId = next.id;
+      form.tempC = next.targetTempC;
+      form.targetSteepS = next.targetSteepS;
+      if (next.type === 'green' || next.type === 'herbal') form.milkMl = 0;
+    } else {
+      form.teaId = null;
+    }
+    state.settings.lastRecipe = state.teas.length ? clone(form) : null;
+  }
+  if (ui.insightTeaId === id) ui.insightTeaId = null;
+  if (activeBrew && activeBrew.teaId === id) {
+    activeBrew.teaSnapshot = activeBrew.teaSnapshot || teaSnapshot(tea);
+    saveActive();
+  }
+  saveState();
+  render();
+  toast('Tea deleted — history keeps its details');
 }
 
 function addRater() {
@@ -1308,23 +1735,26 @@ function removeRater(name) {
 
 /* ---------- DATA ---------- */
 function loadDemo() {
+  if (activeBrew) return toast('Finish the current brew first');
   if (state.brews.length && !confirm('Replace the current data with the fictional demo set?')) return;
   const demo = makeDemoData();
   state.teas = demo.teas;
   state.brews = demo.brews;
+  state.version = 2;
   state.settings.lastRecipe = null;
   saveState();
   ui.sheet = null;
   ui.tab = 'insights';
   ui.insightTeaId = demo.teas[0].id;
   ui.insightRater = null;
+  form = {teaId: demo.teas[0].id, waterMl: 250, milkMl: 20, tempC: demo.teas[0].targetTempC, handling: 'none', preheat: false, notes: '', targetSteepS: demo.teas[0].targetSteepS};
   render();
   toast('Demo data loaded — fictional cups');
 }
 
 function exportJson() {
   const filename = `teaelle-backup-${new Date().toISOString().slice(0, 10)}.json`;
-  const payload = {app: 'teaelle', version: 1, exportedAt: new Date().toISOString(), data: state};
+  const payload = {app: 'teaelle', version: 2, exportedAt: new Date().toISOString(), data: state};
   const json = JSON.stringify(payload, null, 2);
 
   // The Android shell cannot reliably download a Blob; use the native share
@@ -1349,6 +1779,7 @@ function exportJson() {
 
 function importJson(file) {
   if (!file) return;
+  if (activeBrew) return toast('Finish the current brew first');
   const reader = new FileReader();
   reader.onload = () => {
     try {
@@ -1356,11 +1787,17 @@ function importJson(file) {
       const data = payload.data || payload;
       if (!data || !Array.isArray(data.teas) || !Array.isArray(data.brews)) throw new Error('bad format');
       if (!confirm('Replace all current data with this import?')) return;
-      state = data;
+      state = migrateState(data);
+      state.version = 2;
       state.settings = Object.assign(freshState().settings, state.settings || {});
+      const first = state.teas[0];
+      form = first
+        ? {teaId: first.id, waterMl: 250, milkMl: (first.type === 'green' || first.type === 'herbal') ? 0 : 20, tempC: first.targetTempC, handling: 'none', preheat: false, notes: '', targetSteepS: first.targetSteepS}
+        : {teaId: null, waterMl: 250, milkMl: 20, tempC: 95, handling: 'none', preheat: false, notes: '', targetSteepS: 180};
       saveState();
       ui.sheet = null;
       ui.tab = 'history';
+      ui.insightTeaId = null;
       render();
       toast('Import complete');
     } catch (e) {
@@ -1371,6 +1808,7 @@ function importJson(file) {
 }
 
 function resetAll() {
+  if (activeBrew) return toast('Finish the current brew first');
   if (!confirm('Reset everything? All brews, ratings and settings will be deleted.')) return;
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(ACTIVE_KEY);
@@ -1472,8 +1910,8 @@ function makeDemoData() {
         });
       }
       brews.push({
-        id: uid(), ts, teaId: tea.id, waterMl, milkMl, tempC, steepS, handling, preheat,
-        notes: rng() < 0.1 ? pick(notesPool) : '', ratings
+        id: uid(), ts, teaId: tea.id, teaSnapshot: teaSnapshot(tea), waterMl, milkMl, tempC, steepS, handling, preheat,
+        notes: rng() < 0.1 ? pick(notesPool) : '', confirmed: true, ratings
       });
       ts -= Math.round((6 + rng() * 16) * 3600 * 1000);
     }
@@ -1489,7 +1927,7 @@ document.addEventListener('click', e => {
   const action = el.dataset.action;
 
   if (action === 'close-sheet' && e.target.closest('.sheet') && !e.target.closest('.sheet-close')) return;
-  if (action === 'open-detail' && e.target.closest('[data-action="rate"]')) return;
+  if (action === 'open-detail' && e.target.closest('[data-action="rate"],[data-action="confirm-brew"]')) return;
 
   switch (action) {
     case 'tab':
@@ -1498,9 +1936,16 @@ document.addEventListener('click', e => {
       break;
     case 'start': startBrew(); break;
     case 'stop': stopBrew(); break;
+    case 'edit-active': openActiveActuals(); break;
+    case 'save-active': saveActiveActuals(); break;
+    case 'set-confirm': setConfirmField(el.dataset.field, el.dataset.value); break;
     case 'discard': discardActive(); break;
     case 'open-settings':
       ui.sheet = {type: 'settings'};
+      render();
+      break;
+    case 'open-library':
+      ui.sheet = {type: 'library'};
       render();
       break;
     case 'close-sheet':
@@ -1510,6 +1955,19 @@ document.addEventListener('click', e => {
     case 'rate':
       e.stopPropagation();
       openRating(el.dataset.id);
+      break;
+    case 'confirm-brew':
+      e.stopPropagation();
+      openConfirm(el.dataset.id);
+      break;
+    case 'confirm-and-rate':
+      confirmAndRate();
+      break;
+    case 'confirm-save':
+      confirmSave();
+      break;
+    case 'confirm-discard':
+      confirmDiscard();
       break;
     case 'open-detail':
       openDetail(el.dataset.id);
@@ -1552,6 +2010,13 @@ document.addEventListener('click', e => {
       ui.sheet = {type: 'tea'};
       render();
       break;
+    case 'edit-tea':
+      ui.sheet = {type: 'tea', editId: el.dataset.id};
+      render();
+      break;
+    case 'delete-tea':
+      deleteTea(el.dataset.id);
+      break;
     case 'save-tea':
       saveTea();
       break;
@@ -1590,6 +2055,7 @@ document.addEventListener('change', e => {
   if (el.matches('[data-form="teaId"]')) {
     form.teaId = el.value;
     const tea = getTea(el.value);
+    if (!tea) return;
     form.tempC = tea.targetTempC;
     form.targetSteepS = tea.targetSteepS;
     if (tea.type === 'green' || tea.type === 'herbal') form.milkMl = 0;
@@ -1602,6 +2068,10 @@ document.addEventListener('change', e => {
   }
   if (el.matches('[data-sheet-field="rater"]')) {
     if (ui.sheet && ui.sheet.type === 'rating') ui.sheet.draft.rater = el.value;
+  }
+  if (el.matches('[data-confirm]') && ui.sheet && (ui.sheet.type === 'confirm' || ui.sheet.type === 'actuals')) {
+    ui.sheet.draft[el.dataset.confirm] = el.type === 'checkbox' ? el.checked : el.value;
+    if (el.type === 'number') updateActualDerived();
   }
   if (el.matches('[data-setting]')) {
     const key = el.dataset.setting;
@@ -1617,6 +2087,10 @@ document.addEventListener('change', e => {
 
 document.addEventListener('input', e => {
   const el = e.target;
+  if (el.matches('[data-confirm]') && ui.sheet && (ui.sheet.type === 'confirm' || ui.sheet.type === 'actuals')) {
+    ui.sheet.draft[el.dataset.confirm] = el.type === 'checkbox' ? el.checked : el.value;
+    if (el.type === 'number') updateActualDerived();
+  }
   if (el.matches('[data-form]')) {
     const field = el.dataset.form;
     let val = el.type === 'checkbox' ? el.checked : el.value;
@@ -1625,7 +2099,7 @@ document.addEventListener('input', e => {
     if (field === 'waterMl' || field === 'milkMl') {
       const tea = getTea(form.teaId);
       const water = Number(form.waterMl), milk = Number(form.milkMl);
-      const conc = round1((tea.bagMassG / water) * 1000);
+      const conc = round1(((tea ? Number(tea.bagMassG) : 2) / water) * 1000);
       const mf = fmtPct(milk / (water + milk));
       if ($('#out-water')) $('#out-water').textContent = Math.round(water);
       if ($('#out-milk')) $('#out-milk').textContent = Math.round(milk);
@@ -1647,16 +2121,24 @@ function renderSheetOnly() {
   else if (ui.sheet.type === 'detail') root.innerHTML = detailSheetHtml();
   else if (ui.sheet.type === 'settings') root.innerHTML = settingsSheetHtml();
   else if (ui.sheet.type === 'tea') root.innerHTML = teaSheetHtml();
+  else if (ui.sheet.type === 'library') root.innerHTML = librarySheetHtml();
+  else if (ui.sheet.type === 'confirm') root.innerHTML = confirmSheetHtml();
+  else if (ui.sheet.type === 'actuals') root.innerHTML = actualsSheetHtml();
 }
 
 function render() {
   $('#view').innerHTML = ui.tab === 'brew' ? renderBrew() : ui.tab === 'history' ? renderHistory() : renderInsights();
   $$('.tabbar button').forEach(b => b.classList.toggle('active', b.dataset.tab === ui.tab));
   const badge = $('#badge');
-  const n = state.brews.filter(b => !b.ratings || !b.ratings.length).length;
+  const n = state.brews.filter(b => b.confirmed === false || !b.ratings || !b.ratings.length).length;
   badge.textContent = n || '';
   badge.style.display = n ? 'grid' : 'none';
   renderSheetOnly();
+  const toastEl = $('#toast');
+  if (toastEl) {
+    toastEl.style.top = ui.sheet ? '14px' : '';
+    toastEl.style.bottom = ui.sheet ? 'auto' : '';
+  }
   if (ui.tab === 'brew' && activeBrew) ensureTick();
 }
 

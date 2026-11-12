@@ -64,6 +64,7 @@ Expected: `package: name='com.teaelle.app' versionCode='N'`, no
 | versionCode | versionName | Notes |
 |---|---|---|
 | 1 | 1.0.0 | First signed release. |
+| 2 | 1.0.1 | Tea library edit/delete; confirm actuals at bag-out; edit actuals mid-brew; history snapshots. |
 
 ## Custody
 
