@@ -1,0 +1,1663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f3ecdf">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>teaelle — a brewing notebook that learns</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<style>
+  :root{
+    --bg:#f3ecdf; --card:#fffaf1; --card-2:#fbf3e5;
+    --ink:#1f2a24; --muted:#7c7264; --line:#e3d8c6;
+    --accent:#2f6b4f; --accent-soft:#dce9de; --amber:#c47b2c; --amber-soft:#f3e2c8;
+    --danger:#a8442f; --shadow:0 12px 34px rgba(48,36,22,.09);
+    --radius:20px; --radius-sm:14px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;min-height:100%}
+  body{
+    background:
+      radial-gradient(900px 520px at 8% -8%, #fdf8ee 0%, rgba(253,248,238,0) 62%),
+      radial-gradient(700px 420px at 105% 8%, #efe2cc 0%, rgba(239,226,204,0) 58%),
+      var(--bg);
+    color:var(--ink);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  button,input,select,textarea{font:inherit;color:inherit}
+  button{cursor:pointer}
+  #app{max-width:560px;margin:0 auto;min-height:100vh;padding-bottom:96px}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:22px 20px 8px}
+  .brand{display:flex;align-items:center;gap:12px}
+  .brand h1{font-family:Georgia,"Times New Roman",serif;font-size:28px;line-height:1;margin:0;letter-spacing:-.6px}
+  .brand p{margin:4px 0 0;font-size:11.5px;color:var(--muted);letter-spacing:.01em}
+  .logo{width:40px;height:40px;flex:none}
+  .icon-btn{width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:rgba(255,250,241,.7);display:grid;place-items:center;font-size:18px;color:var(--ink)}
+  main{padding:8px 18px 22px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);margin-bottom:14px}
+  .card.tight{padding:14px}
+  .eyebrow{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .muted{color:var(--muted)}
+  .hint{font-size:11.5px;color:var(--muted);line-height:1.45;margin:8px 0 0}
+  h2{font-family:Georgia,"Times New Roman",serif;font-size:24px;line-height:1.12;margin:6px 0 6px;letter-spacing:-.3px}
+  h3{font-size:13px;margin:0;letter-spacing:.01em}
+  .section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+  .link{border:0;background:none;padding:0;color:var(--accent);font-size:11.5px;font-weight:700;text-decoration:underline;text-underline-offset:2px}
+  .btn{min-height:52px;border:0;border-radius:16px;padding:0 18px;font-weight:750;font-size:15px;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:transform .12s ease, filter .12s ease}
+  .btn:active{transform:scale(.985)}
+  .btn-wide{width:100%}
+  .btn-primary{background:var(--accent);color:#fff;box-shadow:0 8px 18px rgba(47,107,79,.22)}
+  .btn-amber{background:var(--amber);color:#fff;box-shadow:0 8px 18px rgba(196,123,44,.22)}
+  .btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:650}
+  .btn-soft{background:var(--accent-soft);color:var(--accent);font-weight:750}
+  .btn-small{min-height:40px;font-size:13px;border-radius:13px}
+  .btn-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+  .timer-card{background:linear-gradient(160deg,#1f3a2c 0%,#244733 55%,#2f6b4f 100%);border:0;color:#f7f1e5;border-radius:26px;padding:22px 20px 20px;box-shadow:0 18px 38px rgba(25,45,34,.26);position:relative;overflow:hidden}
+  .timer-card:after{content:"";position:absolute;width:240px;height:240px;border-radius:50%;right:-90px;top:-120px;background:radial-gradient(circle,rgba(255,255,255,.12),rgba(255,255,255,0) 65%)}
+  .timer-card .eyebrow{color:#bcd6c6}
+  .timer{font-family:Georgia,"Times New Roman",serif;font-size:66px;line-height:1;letter-spacing:-2.5px;font-variant-numeric:tabular-nums;margin:12px 0 4px}
+  .timer-sub{font-size:12px;color:#cfe0d4;line-height:1.4}
+  .timer-target{display:flex;justify-content:space-between;font-size:11px;color:#cfe0d4;margin-top:14px}
+  .progress{height:7px;border-radius:99px;background:rgba(255,255,255,.16);overflow:hidden;margin:8px 0 16px}
+  .progress>i{display:block;height:100%;background:#e8b86a;border-radius:99px;transition:width .4s linear}
+  .progress>i.over{background:#e07a55}
+  .timer-card .btn-amber{background:#e8b86a;color:#243a2c;box-shadow:none}
+  .timer-card .btn-ghost{color:#cfe0d4;border-color:rgba(255,255,255,.22)}
+  .idle-timer{font-family:Georgia,serif;font-size:58px;line-height:1;letter-spacing:-2px;margin:14px 0 8px;color:#2a3c31;font-variant-numeric:tabular-nums}
+  .hero{background:linear-gradient(165deg,#fffaf1 0%,#f8efdf 100%)}
+  .field{margin:16px 0}
+  .field:first-child{margin-top:0}
+  .field-label{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
+  .field-label label,.field-label .lab{font-size:12px;font-weight:750;letter-spacing:.01em}
+  .field-val{font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted)}
+  .field-val b{color:var(--ink);font-size:13px}
+  select,input[type=text],input[type=number],textarea{width:100%;border:1px solid var(--line);background:#fffdf8;border-radius:13px;padding:12px 13px;font-size:14px;outline:none}
+  select:focus,input:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(47,107,79,.1)}
+  textarea{resize:vertical;min-height:58px}
+  input[type=range]{width:100%;appearance:none;height:30px;background:transparent;margin:0}
+  input[type=range]::-webkit-slider-runnable-track{height:7px;border-radius:99px;background:#e7dccb}
+  input[type=range]::-webkit-slider-thumb{appearance:none;width:26px;height:26px;border-radius:50%;background:var(--accent);border:4px solid #fffaf1;box-shadow:0 2px 8px rgba(47,107,79,.3);margin-top:-10px}
+  input[type=range]::-moz-range-track{height:7px;border-radius:99px;background:#e7dccb}
+  input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--accent);border:4px solid #fffaf1}
+  .seg{display:grid;grid-auto-flow:column;gap:4px;background:#efe5d5;padding:4px;border-radius:14px}
+  .seg button{border:0;background:transparent;padding:10px 5px;border-radius:11px;font-size:12px;font-weight:650;color:#6f6557;min-height:40px}
+  .seg button.active{background:#fffaf1;color:var(--ink);box-shadow:0 1px 5px rgba(50,35,20,.1);font-weight:800}
+  .switch-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 0}
+  .switch{position:relative;width:48px;height:28px;flex:none}
+  .switch input{position:absolute;opacity:0;width:100%;height:100%;margin:0}
+  .switch span{position:absolute;inset:0;background:#e2d6c4;border-radius:99px;transition:.2s}
+  .switch span:after{content:"";position:absolute;width:22px;height:22px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 4px rgba(0,0,0,.16)}
+  .switch input:checked+span{background:var(--accent)}
+  .switch input:checked+span:after{transform:translateX(20px)}
+  .derived{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .pill{display:inline-flex;align-items:center;gap:5px;background:var(--card-2);border:1px solid var(--line);border-radius:99px;padding:5px 9px;font-size:10.5px;color:var(--muted);white-space:nowrap}
+  .pill b{color:var(--ink);font-weight:800}
+  .chip-row{display:flex;gap:8px;overflow-x:auto;padding:2px 0 4px;scrollbar-width:none}
+  .chip-row::-webkit-scrollbar{display:none}
+  .chip{border:1px solid var(--line);background:#fffdf8;border-radius:99px;padding:8px 13px;font-size:12px;font-weight:650;white-space:nowrap;color:var(--muted)}
+  .chip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .brew-card{display:flex;align-items:center;gap:12px;padding:13px 14px;border:1px solid var(--line);background:#fffdf8;border-radius:16px;margin-bottom:9px;transition:transform .1s ease}
+  .brew-card:active{transform:scale(.99)}
+  .brew-main{min-width:0;flex:1}
+  .brew-title{font-size:13.5px;font-weight:800;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .brew-meta{font-size:10.5px;color:var(--muted);margin-top:3px;line-height:1.35}
+  .brew-side{flex:none;display:flex;align-items:center;gap:6px}
+  .rating-badge{min-width:38px;height:38px;border-radius:12px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:900;font-size:15px;font-variant-numeric:tabular-nums}
+  .rating-badge.low{background:#f4ded8;color:var(--danger)}
+  .rating-badge.mid{background:var(--amber-soft);color:#8a531a}
+  .rate-btn{border:1px solid var(--accent);background:transparent;color:var(--accent);border-radius:11px;padding:8px 10px;font-size:11px;font-weight:800}
+  .empty{text-align:center;padding:26px 12px}
+  .empty h3{font-family:Georgia,serif;font-size:20px;margin:0 0 6px}
+  .empty p{font-size:12px;color:var(--muted);line-height:1.5;margin:0 auto 14px;max-width:280px}
+  .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0 4px}
+  .stat{background:#fffdf8;border:1px solid var(--line);border-radius:14px;padding:10px 9px;text-align:center}
+  .stat b{display:block;font-size:18px;line-height:1.1;font-variant-numeric:tabular-nums}
+  .stat span{display:block;font-size:9.5px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:.06em}
+  .warn-list{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+  .warn{font-size:10px;line-height:1.3;color:#7d4a12;background:#f8e8cd;border:1px solid #ecd3ac;border-radius:8px;padding:5px 7px}
+  .driver{margin:11px 0}
+  .driver-top{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;font-weight:750;margin-bottom:5px}
+  .driver-track{height:8px;border-radius:99px;background:#ede3d3;overflow:hidden}
+  .driver-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,#9fc3ac,#2f6b4f)}
+  .driver-dir{font-weight:900;font-size:11px}
+  .driver-dir.pos{color:var(--accent)}
+  .driver-dir.neg{color:var(--danger)}
+  .heatmap{width:100%;height:auto;display:block;margin:4px 0 0}
+  .legend{display:flex;align-items:center;gap:7px;font-size:9.5px;color:var(--muted);margin-top:7px}
+  .legend-bar{height:6px;flex:1;border-radius:99px;background:linear-gradient(90deg,#e6d8c2,#d9a441,#2f6b4f)}
+  .best-cup{display:flex;gap:12px;align-items:flex-start}
+  .best-score{width:50px;height:50px;border-radius:16px;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:22px;font-weight:900;flex:none;font-variant-numeric:tabular-nums}
+  .best-body{min-width:0;flex:1}
+  .best-body h4{margin:0 0 3px;font-size:14px}
+  .best-body p{margin:0;font-size:11px;color:var(--muted);line-height:1.45}
+  .plan-grid{display:grid;gap:6px;margin-top:12px}
+  .plan-row{display:grid;grid-template-columns:56px repeat(3,1fr);gap:6px;align-items:center}
+  .plan-temp{font-size:10px;color:var(--muted);font-weight:750}
+  .plan-cell{border:1px solid var(--line);background:#fffdf8;border-radius:11px;padding:9px 4px;font-size:10.5px;font-weight:750;font-variant-numeric:tabular-nums}
+  .plan-cell:active{background:var(--accent-soft)}
+  .tabbar{position:fixed;bottom:0;left:0;right:0;max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:0;background:rgba(255,250,241,.92);backdrop-filter:blur(14px);border-top:1px solid var(--line);padding:8px 10px calc(10px + env(safe-area-inset-bottom));z-index:20}
+  .tabbar button{border:0;background:transparent;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;font-weight:750;padding:5px 0;border-radius:12px;position:relative}
+  .tabbar button svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .tabbar button.active{color:var(--accent)}
+  .tabbar .badge{position:absolute;top:0;right:calc(50% - 18px);min-width:16px;height:16px;border-radius:99px;background:var(--amber);color:#fff;font-size:9px;display:grid;place-items:center;padding:0 4px}
+  .overlay{position:fixed;inset:0;background:rgba(24,18,12,.38);display:flex;align-items:flex-end;justify-content:center;z-index:50;animation:fade .18s ease}
+  .sheet{width:100%;max-width:560px;background:var(--card);border-radius:26px 26px 0 0;max-height:94vh;overflow:auto;padding:18px 20px calc(24px + env(safe-area-inset-bottom));animation:slide .24s cubic-bezier(.2,.8,.2,1)}
+  @keyframes slide{from{transform:translateY(26px);opacity:.6}to{transform:translateY(0);opacity:1}}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .sheet-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
+  .sheet-head h2{margin-top:3px}
+  .sheet-close{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:#fffdf8;font-size:15px;display:grid;place-items:center;flex:none}
+  .blind{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);border-radius:99px;padding:5px 8px}
+  .rating-scale{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin:10px 0 4px}
+  .rating-dot{aspect-ratio:1;border-radius:50%;border:1px solid var(--line);background:#fffdf8;font-size:13px;font-weight:800;color:var(--muted);display:grid;place-items:center;min-height:0;padding:0}
+  .rating-dot.active{background:var(--accent);color:#fff;border-color:var(--accent);transform:scale(1.06)}
+  .rating-labels{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;text-align:center;font-size:8px;line-height:1.15;color:var(--muted);min-height:22px}
+  .rating-labels span:nth-child(1),.rating-labels span:nth-child(2){color:var(--danger)}
+  .rating-labels span:nth-child(6),.rating-labels span:nth-child(7){color:var(--accent);font-weight:700}
+  .tag-field{margin-top:16px}
+  .tag-field .field-label{margin-bottom:7px}
+  .tag-field .seg button{font-size:11px;padding:9px 4px}
+  .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+  .detail-item{background:#fffdf8;border:1px solid var(--line);border-radius:12px;padding:9px 10px}
+  .detail-item span{display:block;font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+  .detail-item b{display:block;font-size:13px;margin-top:3px;font-variant-numeric:tabular-nums}
+  .rating-row{border-top:1px solid var(--line);padding:12px 0 2px}
+  .rating-row:first-of-type{border-top:0}
+  .rating-row-head{display:flex;align-items:center;gap:8px;justify-content:space-between}
+  .rating-row-head b{font-size:12.5px}
+  .rating-row-head span{font-size:10px;color:var(--muted)}
+  .rating-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+  .rating-tags span{font-size:9.5px;background:var(--card-2);border:1px solid var(--line);border-radius:7px;padding:4px 6px;color:var(--muted)}
+  .setting-group{border-top:1px solid var(--line);padding:16px 0 4px}
+  .setting-group:first-of-type{border-top:0;padding-top:0}
+  .setting-group>label{display:block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+  .rater-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:#fffdf8;border-radius:99px;padding:6px 9px;font-size:11px;font-weight:700}
+  .rater-chip button{border:0;background:none;color:var(--muted);font-size:12px;padding:0;line-height:1}
+  .inline{display:flex;gap:7px}
+  .inline input{flex:1}
+  .inline button{border:0;background:var(--accent);color:#fff;border-radius:11px;padding:0 13px;font-size:12px;font-weight:800}
+  .danger{color:var(--danger)}
+  .data-btn{width:100%;text-align:left;border:1px solid var(--line);background:#fffdf8;border-radius:12px;padding:12px 13px;font-size:12.5px;font-weight:700;margin-bottom:7px;display:flex;justify-content:space-between;align-items:center}
+  .data-btn span{color:var(--muted);font-weight:500;font-size:10.5px}
+  .toast{position:fixed;left:50%;bottom:104px;transform:translateX(-50%) translateY(10px);background:#1f2a24;color:#fff;border-radius:99px;padding:10px 16px;font-size:12px;font-weight:700;opacity:0;pointer-events:none;transition:.22s;z-index:80;max-width:88vw;text-align:center}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  @media (min-width:600px){
+    body{padding:18px 0 40px}
+    #app{border-radius:32px;background:rgba(255,250,241,.32);box-shadow:0 30px 80px rgba(50,35,20,.12)}
+    .tabbar{position:static;bottom:auto;border:1px solid var(--line);border-radius:22px;margin:18px auto 0;max-width:520px;box-shadow:0 12px 30px rgba(50,35,20,.12)}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 64 64" aria-hidden="true">
+        <circle cx="32" cy="32" r="30" fill="#2f6b4f"/>
+        <path d="M18 39c0-9 6-16 15-18 3 2 4 6 4 9 0 6-4 11-10 13-3 1-6 0-9-1v-3z" fill="#cfe0d4"/>
+        <path d="M20 43c7-1 14-5 18-11" stroke="#2f6b4f" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <path d="M37 20c5 2 9 5 12 10" stroke="#e8b86a" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+      </svg>
+      <div>
+        <h1>teaelle</h1>
+        <p>A brewing notebook that learns</p>
+      </div>
+    </div>
+    <button class="icon-btn" data-action="open-settings" aria-label="Settings">⚙</button>
+  </header>
+  <main id="view"></main>
+  <nav class="tabbar" aria-label="Main tabs">
+    <button data-action="tab" data-tab="brew" class="active" aria-label="Brew">
+      <svg viewBox="0 0 24 24"><path d="M5 8h12v6a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5V8z"/><path d="M17 10h1.5a2.5 2.5 0 0 1 0 5H17"/><path d="M7 4c0 1 1 1.5 1 2.5M11 4c0 1 1 1.5 1 2.5"/></svg>
+      <span>Brew</span>
+    </button>
+    <button data-action="tab" data-tab="history" aria-label="History">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
+      <span>History</span>
+      <span class="badge" id="badge" style="display:none"></span>
+    </button>
+    <button data-action="tab" data-tab="insights" aria-label="Insights">
+      <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="M7 15l3-4 3 2 4-6"/></svg>
+      <span>Insights</span>
+    </button>
+  </nav>
+</div>
+<div id="sheet-root"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ------------------------------------------------------------------ */
+/*  teaelle — a local-first tea brewing demo                           */
+/*  All data stays in localStorage. No account, no server.             */
+/* ------------------------------------------------------------------ */
+
+const STORAGE_KEY = 'teaelle.v1';
+const ACTIVE_KEY = 'teaelle.active';
+const RATING_LABELS = ['', 'Pour away', 'Bad', 'Meh', 'Fine', 'Good', 'Very good', 'Best cup'];
+const HANDLING_LABELS = {none:'Lift out', dunk:'Dunk & lift', squeeze:'Light squeeze'};
+const TEA_TYPES = ['black', 'green', 'oolong', 'herbal', 'other'];
+
+const DEFAULT_TEAS = [
+  {id:'yorkshire-gold', brand:'Yorkshire Tea', product:'Gold', type:'black', bagMassG:3.2, bagFormat:'paper', targetTempC:95, targetSteepS:180},
+  {id:'twinings-eb', brand:'Twinings', product:'English Breakfast', type:'black', bagMassG:2.5, bagFormat:'paper', targetTempC:95, targetSteepS:180},
+  {id:'twinings-green', brand:'Twinings', product:'Green Tea', type:'green', bagMassG:2.0, bagFormat:'paper', targetTempC:80, targetSteepS:120}
+];
+
+/* ---------- tiny utilities ---------- */
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+const uid = () => Math.random().toString(36).slice(2, 9);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const avg = arr => arr.reduce((a, b) => a + b, 0) / (arr.length || 1);
+const sum = arr => arr.reduce((a, b) => a + b, 0);
+const round1 = v => Math.round(v * 10) / 10;
+const fmtSteep = s => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.floor(Math.max(0, s) % 60)).padStart(2, '0')}`;
+const fmtMl = v => `${Math.round(v)} ml`;
+const fmtPct = v => `${Math.round(v * 100)}%`;
+const escapeHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clone = obj => JSON.parse(JSON.stringify(obj));
+
+function fmtDate(ts) {
+  const d = new Date(ts), now = new Date();
+  const same = d.toDateString() === now.toDateString();
+  const yest = new Date(now); yest.setDate(now.getDate() - 1);
+  const isYest = d.toDateString() === yest.toDateString();
+  const time = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  if (same) return `Today ${time}`;
+  if (isYest) return `Yesterday ${time}`;
+  return d.toLocaleDateString([], {day:'numeric', month:'short'}) + ` ${time}`;
+}
+
+function toast(msg) {
+  const el = $('#toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+/* ---------- state ---------- */
+function freshState() {
+  return {
+    version: 1,
+    teas: clone(DEFAULT_TEAS),
+    brews: [],
+    settings: {
+      raters: ['Alex'],
+      kettleOffsetC: 0,
+      waterHardnessPpm: null,
+      waterAlkalinityPpm: null,
+      lastRecipe: null
+    }
+  };
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return freshState();
+    const s = JSON.parse(raw);
+    if (!s || !Array.isArray(s.teas) || !Array.isArray(s.brews)) return freshState();
+    s.settings = Object.assign(freshState().settings, s.settings || {});
+    if (!Array.isArray(s.settings.raters) || !s.settings.raters.length) s.settings.raters = ['Alex'];
+    return s;
+  } catch (e) {
+    return freshState();
+  }
+}
+
+function saveState() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+}
+
+function loadActive() {
+  try {
+    const raw = localStorage.getItem(ACTIVE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+
+function saveActive() {
+  try {
+    if (activeBrew) localStorage.setItem(ACTIVE_KEY, JSON.stringify(activeBrew));
+    else localStorage.removeItem(ACTIVE_KEY);
+  } catch (e) {}
+}
+
+let state = loadState();
+let activeBrew = loadActive();
+let tick = null;
+let ui = {
+  tab: 'brew',
+  historyFilter: 'all',
+  insightTeaId: null,
+  insightRater: null,
+  sheet: null
+};
+
+function getTea(id) {
+  return state.teas.find(t => t.id === id) || state.teas[0] || DEFAULT_TEAS[0];
+}
+
+function defaultRater() {
+  const counts = state.settings.raters.map(r => ({
+    r,
+    n: state.brews.reduce((a, b) => a + b.ratings.filter(x => x.rater === r).length, 0)
+  }));
+  counts.sort((a, b) => b.n - a.n);
+  return counts[0] && counts[0].n ? counts[0].r : 'all';
+}
+
+let form = (() => {
+  const lr = state.settings.lastRecipe;
+  if (activeBrew) {
+    return {
+      teaId: activeBrew.teaId, waterMl: activeBrew.waterMl, milkMl: activeBrew.milkMl,
+      tempC: activeBrew.tempC, handling: activeBrew.handling, preheat: activeBrew.preheat,
+      notes: activeBrew.notes || '', targetSteepS: activeBrew.targetSteepS
+    };
+  }
+  if (lr && state.teas.some(t => t.id === lr.teaId)) return Object.assign({}, lr);
+  const t = state.teas[0];
+  return {teaId: t.id, waterMl: 250, milkMl: 20, tempC: t.targetTempC, handling: 'none', preheat: false, notes: '', targetSteepS: t.targetSteepS};
+})();
+
+/* ---------- shared render helpers ---------- */
+function teaName(tea) { return `${tea.brand} ${tea.product}`; }
+function teaMeta(tea) { return `${tea.type} · ${tea.bagMassG}g · ${tea.bagFormat}`; }
+function overallClass(n) { return n <= 3 ? 'low' : n <= 5 ? 'mid' : ''; }
+function ratingBadge(b) {
+  if (!b.ratings || !b.ratings.length) return '';
+  const latest = b.ratings[b.ratings.length - 1];
+  const initials = b.ratings.map(r => r.rater.slice(0, 1).toUpperCase()).join('');
+  return `<div class="rating-badge ${overallClass(latest.overall)}" title="${escapeHtml(b.ratings.map(r => `${r.rater}: ${r.overall}/7`).join(' · '))}">${latest.overall}</div><div style="font-size:9px;color:var(--muted);font-weight:800">${escapeHtml(initials)}</div>`;
+}
+
+function segHtml(field, value, options) {
+  return `<div class="seg">${options.map(o => `<button type="button" data-action="set-rating" data-field="${field}" data-value="${o.v}" class="${Number(value) === Number(o.v) ? 'active' : ''}">${o.label}</button>`).join('')}</div>`;
+}
+
+/* ---------- BREW VIEW ---------- */
+function renderBrew() {
+  const tea = getTea(form.teaId);
+  const target = Number(form.targetSteepS || tea.targetSteepS || 180);
+  const elapsed = activeBrew ? elapsedActive() : 0;
+  const pct = clamp(elapsed / target * 100, 0, 100);
+
+  if (activeBrew) {
+    return `
+      <section class="timer-card">
+        <div class="eyebrow">Steeping</div>
+        <div class="timer" id="timer-display">${fmtSteep(elapsed)}</div>
+        <div class="timer-sub">${escapeHtml(teaName(tea))} · ${tea.bagMassG}g bag</div>
+        <div class="timer-target"><span>Target ${fmtSteep(target)}</span><span id="timer-clock">${fmtSteep(elapsed)} elapsed</span></div>
+        <div class="progress"><i id="timer-progress" class="${elapsed > target ? 'over' : ''}" style="width:${pct}%"></i></div>
+        <button class="btn btn-amber btn-wide" data-action="stop">Bag out — stop timer</button>
+        <div style="height:8px"></div>
+        <button class="btn btn-ghost btn-wide btn-small" data-action="discard">Discard this brew</button>
+      </section>
+      <section class="card">
+        <div class="section-head"><h3>Recipe in progress</h3><span class="pill">${escapeHtml(HANDLING_LABELS[form.handling] || form.handling)}</span></div>
+        <div class="detail-grid">
+          <div class="detail-item"><span>Water</span><b>${fmtMl(form.waterMl)}</b></div>
+          <div class="detail-item"><span>Milk</span><b>${form.milkMl ? fmtMl(form.milkMl) : 'None'}</b></div>
+          <div class="detail-item"><span>Temperature</span><b>${form.tempC}°C</b></div>
+          <div class="detail-item"><span>Cup</span><b>${form.preheat ? 'Preheated' : 'Cold'}</b></div>
+        </div>
+        <p class="hint">You can put the phone down — the elapsed time is stored as a timestamp, so it keeps counting even if the screen locks.</p>
+      </section>`;
+  }
+
+  return `
+    <section class="card hero">
+      <div class="eyebrow">New cup</div>
+      <h2>${escapeHtml(teaName(tea))}</h2>
+      <p class="muted" style="font-size:12px;line-height:1.5;margin:0 0 4px">Set the recipe, then start the timer as the bag goes in.</p>
+      <div class="idle-timer">0:00</div>
+      <div class="timer-target" style="color:var(--muted);margin:0 0 14px"><span>Target ${fmtSteep(target)}</span><span>${tea.type} tea</span></div>
+      <button class="btn btn-primary btn-wide" data-action="start">Bag in — start timer</button>
+    </section>
+
+    <section class="card">
+      <div class="section-head"><h3>Recipe</h3><div style="display:flex;gap:12px"><button class="link" data-action="add-tea">＋ tea</button><button class="link" data-action="open-settings">settings</button></div></div>
+
+      <div class="field">
+        <div class="field-label"><label for="tea-select">Tea</label><span class="field-val">${escapeHtml(teaMeta(tea))}</span></div>
+        <select id="tea-select" data-form="teaId">
+          ${state.teas.map(t => `<option value="${escapeHtml(t.id)}" ${t.id === form.teaId ? 'selected' : ''}>${escapeHtml(t.brand)} — ${escapeHtml(t.product)}</option>`).join('')}
+        </select>
+        <p class="hint">Brand → product → type → bag mass. The product is the unit; “brand” alone pools different blends.</p>
+      </div>
+
+      <div class="field">
+        <div class="field-label"><label for="water">Water</label><span class="field-val"><b id="out-water">${Math.round(form.waterMl)}</b> ml</span></div>
+        <input id="water" type="range" min="150" max="400" step="5" value="${form.waterMl}" data-form="waterMl">
+        <div class="derived"><span class="pill">Concentration <b id="out-conc">${round1((tea.bagMassG / form.waterMl) * 1000)}</b> g/L</span><span class="pill">Total <b id="out-total">${Math.round(form.waterMl + form.milkMl)}</b> ml</span></div>
+      </div>
+
+      <div class="field">
+        <div class="field-label"><label for="milk">Milk</label><span class="field-val"><b id="out-milk">${Math.round(form.milkMl)}</b> ml</span></div>
+        <input id="milk" type="range" min="0" max="80" step="5" value="${form.milkMl}" data-form="milkMl">
+        <div class="derived"><span class="pill">Milk fraction <b id="out-milkfrac">${fmtPct(form.milkMl / (form.waterMl + form.milkMl))}</b></span></div>
+      </div>
+
+      <div class="field">
+        <div class="field-label"><label for="temp">Water temperature</label><span class="field-val"><b id="out-temp">${form.tempC}</b> °C</span></div>
+        <input id="temp" type="range" min="65" max="100" step="1" value="${form.tempC}" data-form="tempC">
+        <p class="hint">Measured at pour is best. Kettle setpoint is a proxy; set a house offset in settings if yours overshoots.</p>
+      </div>
+
+      <div class="field">
+        <div class="field-label"><span class="lab">Bag handling</span></div>
+        <div class="seg">
+          <button type="button" data-action="set-form" data-field="handling" data-value="none" class="${form.handling === 'none' ? 'active' : ''}">Lift out</button>
+          <button type="button" data-action="set-form" data-field="handling" data-value="dunk" class="${form.handling === 'dunk' ? 'active' : ''}">Dunk & lift</button>
+          <button type="button" data-action="set-form" data-field="handling" data-value="squeeze" class="${form.handling === 'squeeze' ? 'active' : ''}">Light squeeze</button>
+        </div>
+        <p class="hint">Agitation is the stronger lever; squeeze is kept as a 3-level handling tag, not a core dimension.</p>
+      </div>
+
+      <div class="field">
+        <div class="switch-row">
+          <div><div class="field-label" style="margin:0"><span class="lab">Preheat the cup</span></div><p class="hint" style="margin:3px 0 0">A cold mug drops the brew temperature.</p></div>
+        <label class="switch"><input type="checkbox" data-form="preheat" ${form.preheat ? 'checked' : ''}><span></span></label>
+        </div>
+      </div>
+
+      <div class="field" style="margin-bottom:0">
+        <div class="field-label"><label for="notes">Notes <span class="muted" style="font-weight:500">(optional)</span></label></div>
+        <textarea id="notes" data-form="notes" placeholder="Bag split, distracted, new bag…">${escapeHtml(form.notes || '')}</textarea>
+      </div>
+
+      <button class="btn btn-primary btn-wide" data-action="start" style="margin-top:6px">Bag in — start timer</button>
+    </section>`;
+}
+
+function elapsedActive() {
+  if (!activeBrew) return 0;
+  return Math.max(0, Math.floor((Date.now() - activeBrew.startedAt) / 1000));
+}
+
+function ensureTick() {
+  if (tick) return;
+  tick = setInterval(() => {
+    if (!activeBrew) return;
+    const el = $('#timer-display');
+    if (!el) return;
+    const el2 = elapsedActive();
+    el.textContent = fmtSteep(el2);
+    const clock = $('#timer-clock');
+    if (clock) clock.textContent = `${fmtSteep(el2)} elapsed`;
+    const bar = $('#timer-progress');
+    if (bar) {
+      const tea = getTea(activeBrew.teaId);
+      const target = Number(activeBrew.targetSteepS || tea.targetSteepS || 180);
+      bar.style.width = clamp(el2 / target * 100, 0, 100) + '%';
+      bar.classList.toggle('over', el2 > target);
+    }
+  }, 250);
+}
+
+function startBrew() {
+  if (activeBrew) return;
+  if (Number(form.waterMl) < 100) return toast('Add at least 100 ml of water');
+  state.settings.lastRecipe = clone(form);
+  saveState();
+  activeBrew = {
+    teaId: form.teaId, waterMl: Number(form.waterMl), milkMl: Number(form.milkMl),
+    tempC: Number(form.tempC), handling: form.handling, preheat: !!form.preheat,
+    notes: form.notes || '', targetSteepS: Number(form.targetSteepS || getTea(form.teaId).targetSteepS || 180),
+    startedAt: Date.now()
+  };
+  saveActive();
+  render();
+  toast('Timer started — bag in');
+}
+
+function stopBrew() {
+  if (!activeBrew) return;
+  const steepS = Math.max(1, Math.round((Date.now() - activeBrew.startedAt) / 1000));
+  const brew = {
+    id: uid(),
+    ts: Date.now(),
+    teaId: activeBrew.teaId,
+    waterMl: Number(activeBrew.waterMl),
+    milkMl: Number(activeBrew.milkMl),
+    tempC: Number(activeBrew.tempC),
+    steepS,
+    handling: activeBrew.handling,
+    preheat: !!activeBrew.preheat,
+    notes: activeBrew.notes || '',
+    ratings: []
+  };
+  state.brews.push(brew);
+  activeBrew = null;
+  saveActive();
+  saveState();
+  openRating(brew.id);
+  toast('Brew saved — rate it while it is fresh');
+}
+
+function discardActive() {
+  if (!activeBrew) return;
+  if (!confirm('Discard this brew? The timer will stop and nothing will be saved.')) return;
+  activeBrew = null;
+  saveActive();
+  render();
+  toast('Brew discarded');
+}
+
+/* ---------- HISTORY VIEW ---------- */
+function renderHistory() {
+  const brews = state.brews.slice().sort((a, b) => b.ts - a.ts);
+  const unrated = brews.filter(b => !b.ratings || !b.ratings.length);
+  const filter = ui.historyFilter;
+  const shown = brews.filter(b => filter === 'all' ? true : filter === 'unrated' ? (!b.ratings || !b.ratings.length) : (b.ratings && b.ratings.length));
+
+  return `
+    <section class="card tight">
+      <div class="section-head" style="margin-bottom:10px">
+        <div><div class="eyebrow">History</div><h2 style="margin:4px 0 0">Your cups</h2></div>
+        <button class="link" data-action="export">Export</button>
+      </div>
+      <div class="chip-row">
+        <button class="chip ${filter === 'all' ? 'active' : ''}" data-action="filter" data-filter="all">All ${brews.length}</button>
+        <button class="chip ${filter === 'unrated' ? 'active' : ''}" data-action="filter" data-filter="unrated">Needs rating ${unrated.length}</button>
+        <button class="chip ${filter === 'rated' ? 'active' : ''}" data-action="filter" data-filter="rated">Rated ${brews.length - unrated.length}</button>
+      </div>
+    </section>
+
+    ${unrated.length && filter !== 'rated' ? `
+      <section class="card tight">
+        <div class="section-head" style="margin-bottom:10px"><h3>Needs a rating</h3><span class="pill">${unrated.length} waiting</span></div>
+        ${unrated.slice(0, 6).map(b => brewCard(b, true)).join('')}
+        ${unrated.length > 6 ? `<p class="hint">Showing the 6 most recent unrated cups.</p>` : ''}
+      </section>` : ''}
+
+    <section class="card tight">
+      <div class="section-head" style="margin-bottom:10px"><h3>${filter === 'unrated' ? 'Unrated' : filter === 'rated' ? 'Rated' : 'Most recent'}</h3><span class="pill">${shown.length} cups</span></div>
+      ${shown.length ? shown.map(b => brewCard(b, false)).join('') : `<div class="empty"><h3>No cups here yet</h3><p>Start a brew and it will appear in this list.</p><button class="btn btn-soft btn-small" data-action="tab" data-tab="brew">Brew a cup</button></div>`}
+    </section>`;
+}
+
+function brewCard(b, showRate) {
+  const tea = getTea(b.teaId);
+  return `
+    <article class="brew-card" data-action="open-detail" data-id="${b.id}">
+      <div class="brew-main">
+        <div class="brew-title">${escapeHtml(teaName(tea))}</div>
+        <div class="brew-meta">${fmtDate(b.ts)} · ${fmtSteep(b.steepS)} · ${b.tempC}°C · ${b.waterMl} ml${b.milkMl ? ` + ${b.milkMl} ml milk` : ''}</div>
+      </div>
+      <div class="brew-side">
+        ${showRate && (!b.ratings || !b.ratings.length) ? `<button class="rate-btn" data-action="rate" data-id="${b.id}">Rate</button>` : ratingBadge(b)}
+      </div>
+    </article>`;
+}
+
+/* ---------- INSIGHTS VIEW ---------- */
+function renderInsights() {
+  const tea = getInsightTea();
+  const rater = ui.insightRater || defaultRater();
+  const obs = observationsFor(tea.id, rater);
+
+  return `
+    <section class="card tight">
+      <div class="section-head" style="margin-bottom:10px">
+        <div><div class="eyebrow">Insights</div><h2 style="margin:4px 0 0">What the cups say</h2></div>
+        <span class="pill">demo model</span>
+      </div>
+      <div class="field" style="margin:0 0 10px">
+        <select data-insight-tea>${state.teas.map(t => `<option value="${escapeHtml(t.id)}" ${t.id === tea.id ? 'selected' : ''}>${escapeHtml(teaName(t))}</option>`).join('')}</select>
+      </div>
+      <div class="field" style="margin:0">
+        <select data-insight-rater>
+          <option value="all" ${rater === 'all' ? 'selected' : ''}>All raters</option>
+          ${state.settings.raters.map(r => `<option value="${escapeHtml(r)}" ${r === rater ? 'selected' : ''}>${escapeHtml(r)}</option>`).join('')}
+        </select>
+      </div>
+    </section>
+
+    ${obs.length < 10 ? `
+      <section class="card empty">
+        <h3>Not enough rated cups yet</h3>
+        <p>This tea has <b>${obs.length}</b> rated cup${obs.length === 1 ? '' : 's'} for ${escapeHtml(rater === 'all' ? 'all raters' : rater)}. The demo model needs at least 10 to show drivers and a response surface.</p>
+        <div class="progress" style="background:#e7dccb"><i style="width:${clamp(obs.length / 10 * 100, 0, 100)}%;background:var(--accent)"></i></div>
+        <button class="btn btn-soft btn-small" data-action="tab" data-tab="brew">Brew another cup</button>
+        ${state.brews.length ? '' : `<button class="btn btn-ghost btn-small" data-action="load-demo" style="margin-left:8px">Load demo data</button>`}
+      </section>` : renderModel(tea, rater, obs)}
+  `;
+}
+
+function getInsightTea() {
+  if (ui.insightTeaId) return getTea(ui.insightTeaId);
+  const counts = state.teas.map(t => ({t, n: state.brews.filter(b => b.teaId === t.id && b.ratings.length).length}));
+  counts.sort((a, b) => b.n - a.n);
+  return counts[0] && counts[0].n ? counts[0].t : state.teas[0];
+}
+
+function observationsFor(teaId, rater) {
+  const out = [];
+  for (const b of state.brews) {
+    if (b.teaId !== teaId) continue;
+    for (const r of b.ratings || []) {
+      if (rater === 'all' || r.rater === rater) out.push({brew: b, rating: r});
+    }
+  }
+  return out;
+}
+
+function renderModel(tea, rater, obs) {
+  const model = fitModel(obs, tea);
+  if (!model) return '';
+  const bestObs = obs.slice().sort((a, b) => (b.rating.overall - a.rating.overall) || (b.brew.ts - a.brew.ts))[0];
+  const bestTea = getTea(bestObs.brew.teaId);
+  const plan = makePlan(model, tea, obs);
+
+  const warnings = dataWarnings(obs);
+  const drivers = model.importance.slice().sort((a, b) => b.value - a.value);
+
+  return `
+    <section class="card">
+      <div class="section-head"><h3>Data health</h3><span class="pill">${model.n} observations</span></div>
+      <div class="stat-grid">
+        <div class="stat"><b>${model.n}</b><span>rated cups</span></div>
+        <div class="stat"><b>${model.r2.toFixed(2)}</b><span>fit R²</span></div>
+        <div class="stat"><b>${model.looR2.toFixed(2)}</b><span>LOO R²</span></div>
+      </div>
+      <div class="warn-list">${warnings.length ? warnings.map(w => `<span class="warn">${escapeHtml(w)}</span>`).join('') : `<span class="warn" style="color:var(--accent);background:var(--accent-soft);border-color:#c9ddce">No obvious gaps in the design.</span>`}</div>
+      <p class="hint">Demo model: ridge regression with quadratic time and temperature terms. The production model would be an ordinal, hierarchical model with rater and product random effects.</p>
+    </section>
+
+    <section class="card">
+      <div class="section-head"><h3>What matters</h3><span class="pill">relative influence</span></div>
+      ${drivers.map(d => `
+        <div class="driver">
+          <div class="driver-top"><span>${escapeHtml(d.name)}</span></div>
+          <div class="driver-track"><div class="driver-fill" style="width:${Math.max(4, Math.round(d.value * 100))}%"></div></div>
+        </div>`).join('')}
+      <p class="hint">Permutation importance: how much the model's error worsens when this group of inputs is shuffled. Bigger bars are stronger evidence; the response surface below shows the direction.</p>
+    </section>
+
+    <section class="card">
+      <div class="section-head"><h3>Response surface</h3><span class="pill">time × temperature</span></div>
+      ${renderHeatmap(model, obs, tea)}
+      <div class="legend"><span>lower</span><div class="legend-bar"></div><span>higher predicted rating</span></div>
+      <p class="hint">Dots are observed cups, coloured by their overall rating. The surface holds concentration, milk and handling at your usual values for this tea.</p>
+    </section>
+
+    <section class="card">
+      <div class="section-head"><h3>Best cup so far</h3><span class="pill">${fmtDate(bestObs.brew.ts)}</span></div>
+      <div class="best-cup">
+        <div class="best-score">${bestObs.rating.overall}</div>
+        <div class="best-body">
+          <h4>${escapeHtml(teaName(bestTea))}</h4>
+          <p>${fmtSteep(bestObs.brew.steepS)} · ${bestObs.brew.tempC}°C · ${bestObs.brew.waterMl} ml${bestObs.brew.milkMl ? ` + ${bestObs.brew.milkMl} ml milk` : ''} · ${escapeHtml(HANDLING_LABELS[bestObs.brew.handling] || bestObs.brew.handling)}${bestObs.brew.preheat ? ' · preheated cup' : ''}</p>
+          <p style="margin-top:4px">Rated by ${escapeHtml(bestObs.rating.rater)}. ${bestObs.brew.notes ? escapeHtml(bestObs.brew.notes) : ''}</p>
+        </div>
+      </div>
+      <button class="btn btn-soft btn-small" style="margin-top:12px" data-action="brew-again" data-id="${bestObs.brew.id}">Brew this again</button>
+    </section>
+
+    <section class="card">
+      <div class="section-head"><h3>Next experiment</h3><span class="pill">2 × 3 factorial</span></div>
+      <p class="muted" style="font-size:12px;line-height:1.5;margin:0 0 2px">A balanced 12-brew block around the predicted peak. Two temperatures × three steep times, two replicates. Hold concentration, milk and handling steady.</p>
+      <div class="plan-grid">
+        ${plan.temps.map(t => `<div class="plan-row"><span class="plan-temp">${t}°C</span>${plan.times.map(time => `<button class="plan-cell" data-action="use-cell" data-temp="${t}" data-time="${time}">${fmtSteep(time)}</button>`).join('')}</div>`).join('')}
+      </div>
+      <p class="hint">Tap a cell to load it into the brew screen. The timer records the actual steep; the plan is a target, not a cage.</p>
+    </section>`;
+}
+
+function dataWarnings(obs) {
+  const w = [];
+  const temps = obs.map(o => Number(o.brew.tempC));
+  const times = obs.map(o => Math.log(Math.max(30, o.brew.steepS)));
+  const milks = obs.map(o => Number(o.brew.milkMl || 0) / Math.max(1, Number(o.brew.waterMl) + Number(o.brew.milkMl || 0)));
+  const concs = obs.map(o => {
+    const tea = getTea(o.brew.teaId);
+    return (Number(tea.bagMassG) / Math.max(1, Number(o.brew.waterMl))) * 1000;
+  });
+  const range = a => Math.max(...a) - Math.min(...a);
+  if (new Set(temps).size < 4 || range(temps) < 4) w.push('Temperature varies little — its effect is weakly identified.');
+  if (range(times) < 0.15) w.push('Steep times are clustered — try a wider range.');
+  if (range(milks) < 0.02) w.push('Milk fraction barely varies — its effect is uncertain.');
+  if (range(concs) < 1.5) w.push('Concentration barely varies — volume and bag mass are almost fixed.');
+  const pairs = [[times, temps, 'time/temperature'], [times, concs, 'time/concentration'], [temps, concs, 'temperature/concentration'], [milks, concs, 'milk/concentration']];
+  for (const [a, b, label] of pairs) {
+    if (Math.abs(corr(a, b)) > 0.8) w.push(`${label} move together — effects may be confounded.`);
+  }
+  return w.slice(0, 4);
+}
+
+function corr(a, b) {
+  const ma = avg(a), mb = avg(b);
+  let num = 0, da = 0, db = 0;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i] - ma, y = b[i] - mb;
+    num += x * y; da += x * x; db += y * y;
+  }
+  return num / Math.sqrt((da * db) || 1);
+}
+
+/* ---------- model ---------- */
+function featureVector(b, tea) {
+  const green = tea.type === 'green';
+  const centerTime = Math.log(green ? 150 : 200);
+  const centerTemp = green ? 78 : 93;
+  const lt = Math.log(Math.max(30, Number(b.steepS))) - centerTime;
+  const temp = Number(b.tempC) - centerTemp;
+  const conc = (Number(tea.bagMassG) / Math.max(1, Number(b.waterMl))) * 1000;
+  const milkFrac = Number(b.milkMl || 0) / Math.max(1, Number(b.waterMl) + Number(b.milkMl || 0));
+  return [lt, temp, lt * lt, temp * temp, conc, milkFrac, b.handling === 'squeeze' ? 1 : 0, b.handling === 'dunk' ? 1 : 0, b.preheat ? 1 : 0];
+}
+
+const GROUPS = [
+  {name:'Steep time', idx:[0, 2]},
+  {name:'Temperature', idx:[1, 3]},
+  {name:'Concentration', idx:[4]},
+  {name:'Milk fraction', idx:[5]},
+  {name:'Bag handling', idx:[6, 7]},
+  {name:'Cup preheat', idx:[8]}
+];
+
+function solveLinear(A, b) {
+  const n = A.length;
+  const M = A.map((row, i) => [...row, b[i]]);
+  for (let col = 0; col < n; col++) {
+    let pivot = col;
+    for (let r = col + 1; r < n; r++) if (Math.abs(M[r][col]) > Math.abs(M[pivot][col])) pivot = r;
+    [M[col], M[pivot]] = [M[pivot], M[col]];
+    const pv = M[col][col] || 1e-9;
+    for (let c = col; c <= n; c++) M[col][c] /= pv;
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const f = M[r][col];
+      if (!f) continue;
+      for (let c = col; c <= n; c++) M[r][c] -= f * M[col][c];
+    }
+  }
+  return M.map(row => row[n]);
+}
+
+function fitRidge(X, y, lambda = 0.6) {
+  const n = X.length, d = X[0].length;
+  const means = Array(d).fill(0), sds = Array(d).fill(1);
+  for (let j = 0; j < d; j++) {
+    const col = X.map(r => r[j]);
+    means[j] = avg(col);
+    sds[j] = Math.sqrt(avg(col.map(v => (v - means[j]) ** 2))) || 1;
+  }
+  const Z = X.map(row => row.map((v, j) => (v - means[j]) / sds[j]));
+  const yMean = avg(y);
+  const yc = y.map(v => v - yMean);
+  const A = Array.from({length:d}, () => Array(d).fill(0));
+  const b = Array(d).fill(0);
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < d; j++) {
+      b[j] += Z[i][j] * yc[i];
+      for (let k = 0; k < d; k++) A[j][k] += Z[i][j] * Z[i][k];
+    }
+  }
+  for (let j = 0; j < d; j++) A[j][j] += lambda;
+  const beta = solveLinear(A, b);
+  return {means, sds, yMean, beta};
+}
+
+function predict(model, raw) {
+  let v = model.yMean;
+  for (let j = 0; j < raw.length; j++) v += model.beta[j] * ((raw[j] - model.means[j]) / model.sds[j]);
+  return v;
+}
+
+function mse(model, X, y) {
+  return avg(X.map((row, i) => (predict(model, row) - y[i]) ** 2));
+}
+
+function shuffle(a) {
+  const out = a.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+function median(arr) {
+  const s = arr.slice().sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+function fitModel(obs, tea) {
+  if (obs.length < 10) return null;
+  const X = obs.map(o => featureVector(o.brew, tea));
+  const y = obs.map(o => Number(o.rating.overall));
+  const model = fitRidge(X, y, 0.6);
+  const baseMse = mse(model, X, y);
+  const yMean = avg(y);
+  let sse = 0, sst = 0;
+  for (let i = 0; i < X.length; i++) {
+    const Xi = X.filter((_, k) => k !== i);
+    const yi = y.filter((_, k) => k !== i);
+    const m = fitRidge(Xi, yi, 0.6);
+    const p = predict(m, X[i]);
+    sse += (y[i] - p) ** 2;
+    sst += (y[i] - yMean) ** 2;
+  }
+  const looR2 = 1 - sse / (sst || 1);
+  const r2 = 1 - baseMse / (avg(y.map(v => (v - yMean) ** 2)) || 1);
+
+  const importance = [];
+  const P = 20;
+  for (const g of GROUPS) {
+    let total = 0;
+    for (let p = 0; p < P; p++) {
+      const perm = shuffle([...Array(X.length).keys()]);
+      const Xp = X.map(row => row.slice());
+      for (let i = 0; i < X.length; i++) for (const j of g.idx) Xp[i][j] = X[perm[i]][j];
+      total += mse(model, Xp, y);
+    }
+    const raw = Math.max(0, total / P - baseMse);
+    const med = X[0].map((_, j) => median(X.map(r => r[j])));
+    const hi = med.slice();
+    for (const j of g.idx) hi[j] = med[j] + Math.sqrt(avg(X.map(r => (r[j] - med[j]) ** 2)));
+    const dir = predict(model, hi) - predict(model, med);
+    importance.push({name: g.name, value: raw, direction: dir});
+  }
+  const maxImp = Math.max(...importance.map(i => i.value), 1e-9);
+  importance.forEach(i => i.value = i.value / maxImp);
+
+  const heatmap = makeHeatmap(model, tea, X);
+  return {n: obs.length, r2, looR2, importance, heatmap};
+}
+
+function makeHeatmap(model, tea, X) {
+  const green = tea.type === 'green';
+  const timeMin = green ? 90 : 120;
+  const timeMax = green ? 210 : 330;
+  const tempMin = green ? 68 : 80;
+  const tempMax = green ? 88 : 100;
+  const cols = 12, rows = 8;
+  const times = Array.from({length: cols}, (_, i) => timeMin + (timeMax - timeMin) * i / (cols - 1));
+  const temps = Array.from({length: rows}, (_, i) => tempMin + (tempMax - tempMin) * i / (rows - 1));
+  const med = X[0].map((_, j) => median(X.map(r => r[j])));
+  const centerTime = Math.log(green ? 150 : 200);
+  const centerTemp = green ? 78 : 93;
+  const values = [];
+  let best = {value: -Infinity, time: times[0], temp: temps[0]};
+  for (let r = 0; r < rows; r++) {
+    const row = [];
+    for (let c = 0; c < cols; c++) {
+      const raw = med.slice();
+      const lt = Math.log(Math.max(30, times[c])) - centerTime;
+      const tc = temps[r] - centerTemp;
+      raw[0] = lt;
+      raw[1] = tc;
+      raw[2] = lt * lt;
+      raw[3] = tc * tc;
+      const v = predict(model, raw);
+      row.push(v);
+      if (v > best.value) best = {value: v, time: times[c], temp: temps[r]};
+    }
+    values.push(row);
+  }
+  return {times, temps, values, best, timeMin, timeMax, tempMin, tempMax, cols, rows};
+}
+
+/* ---------- heatmap SVG ---------- */
+function mix(c1, c2, t) {
+  const p = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  const a = p(c1), b = p(c2);
+  return `rgb(${Math.round(a[0] + (b[0] - a[0]) * t)},${Math.round(a[1] + (b[1] - a[1]) * t)},${Math.round(a[2] + (b[2] - a[2]) * t)})`;
+}
+
+function heatColor(v, min, max) {
+  const t = clamp((v - min) / ((max - min) || 1), 0, 1);
+  if (t < 0.5) return mix('#e6d8c2', '#d9a441', t * 2);
+  return mix('#d9a441', '#2f6b4f', (t - 0.5) * 2);
+}
+
+function ratingColor(r) {
+  const v = clamp(Number(r), 1, 7);
+  if (v <= 4) return mix('#b04a3a', '#d9a441', (v - 1) / 3);
+  return mix('#d9a441', '#2f6b4f', (v - 4) / 3);
+}
+
+function renderHeatmap(model, obs, tea) {
+  const H = model.heatmap;
+  const W = 360, HH = 236, L = 38, R = 10, T = 12, B = 34;
+  const pw = W - L - R, ph = HH - T - B;
+  const cw = pw / H.cols, ch = ph / H.rows;
+  const all = H.values.flat();
+  const min = Math.min(...all), max = Math.max(...all);
+  let cells = '';
+  for (let r = 0; r < H.rows; r++) {
+    for (let c = 0; c < H.cols; c++) {
+      const x = L + c * cw, y = T + (H.rows - 1 - r) * ch;
+      cells += `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${(cw + 0.4).toFixed(2)}" height="${(ch + 0.4).toFixed(2)}" fill="${heatColor(H.values[r][c], min, max)}"><title>${fmtSteep(H.times[c])} · ${H.temps[r].toFixed(0)}°C → ${H.values[r][c].toFixed(2)}</title></rect>`;
+    }
+  }
+  const dots = obs.map(o => {
+    const x = L + ((o.brew.steepS - H.timeMin) / (H.timeMax - H.timeMin)) * pw;
+    const y = T + (1 - (o.brew.tempC - H.tempMin) / (H.tempMax - H.tempMin)) * ph;
+    if (x < L || x > L + pw || y < T || y > T + ph) return '';
+    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.4" fill="${ratingColor(o.rating.overall)}" stroke="#fffaf1" stroke-width="1.2"><title>${fmtSteep(o.brew.steepS)} · ${o.brew.tempC}°C · ${o.rating.overall}/7</title></circle>`;
+  }).join('');
+  const bx = L + ((H.best.time - H.timeMin) / (H.timeMax - H.timeMin)) * pw;
+  const by = T + (1 - (H.best.temp - H.tempMin) / (H.tempMax - H.tempMin)) * ph;
+  const xTicks = [0, 0.5, 1].map(f => {
+    const t = H.timeMin + (H.timeMax - H.timeMin) * f;
+    return `<text x="${(L + pw * f).toFixed(1)}" y="${HH - 12}" text-anchor="middle" font-size="9" fill="#7c7264">${fmtSteep(t)}</text>`;
+  }).join('');
+  const yTicks = [0, 0.5, 1].map(f => {
+    const t = H.tempMin + (H.tempMax - H.tempMin) * f;
+    return `<text x="${L - 7}" y="${(T + ph * (1 - f) + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="#7c7264">${t.toFixed(0)}°</text>`;
+  }).join('');
+  return `<svg class="heatmap" viewBox="0 0 ${W} ${HH}" role="img" aria-label="Predicted rating by steep time and water temperature">
+    ${cells}
+    ${xTicks}${yTicks}
+    <text x="${L + pw / 2}" y="${HH - 1}" text-anchor="middle" font-size="9" fill="#7c7264">steep time</text>
+    <text x="11" y="${T + ph / 2}" text-anchor="middle" font-size="9" fill="#7c7264" transform="rotate(-90 11 ${T + ph / 2})">water temp</text>
+    ${dots}
+    <circle cx="${bx.toFixed(1)}" cy="${by.toFixed(1)}" r="7" fill="none" stroke="#1f2a24" stroke-width="1.6" opacity=".8"><title>Predicted peak</title></circle>
+  </svg>`;
+}
+
+/* ---------- experiment plan ---------- */
+function makePlan(model, tea, obs) {
+  const green = tea.type === 'green';
+  const best = model.heatmap.best;
+  const tMin = green ? 70 : 82, tMax = green ? 88 : 100;
+  const sMin = green ? 90 : 120, sMax = green ? 210 : 330;
+  let temps = [best.temp - 5, best.temp + 5].map(v => clamp(Math.round(v), tMin, tMax));
+  if (temps[0] === temps[1]) temps = [clamp(Math.round(best.temp), tMin, tMax), clamp(Math.round(best.temp) + 5, tMin, tMax)];
+  const times = [best.time - 30, best.time, best.time + 30].map(v => clamp(Math.round(v / 5) * 5, sMin, sMax));
+  return {temps, times};
+}
+
+/* ---------- RATING SHEET ---------- */
+function openRating(brewId, ratingId = null) {
+  const brew = state.brews.find(b => b.id === brewId);
+  if (!brew) return;
+  const existing = ratingId ? brew.ratings.find(r => r.id === ratingId) : null;
+  ui.sheet = {
+    type: 'rating',
+    brewId,
+    ratingId,
+    draft: existing ? Object.assign({}, existing) : {
+      overall: 0, strength: 0, bitterness: 0, milk: 0, wouldRepeat: true,
+      rater: state.settings.raters[0] || 'Alex'
+    }
+  };
+  render();
+}
+
+function ratingSheetHtml() {
+  const s = ui.sheet;
+  const brew = state.brews.find(b => b.id === s.brewId);
+  if (!brew) return '';
+  const tea = getTea(brew.teaId);
+  const d = s.draft;
+  const hasMilk = Number(brew.milkMl) > 0;
+  return `
+    <div class="overlay" data-action="close-sheet">
+      <div class="sheet" role="dialog" aria-modal="true" aria-label="Rate this cup">
+        <div class="sheet-head">
+          <div>
+            <span class="blind">Blind rating</span>
+            <h2>How was it?</h2>
+            <p class="muted" style="font-size:11px;margin:0">Cup ${escapeHtml(brew.id.slice(0, 4).toUpperCase())} · ${escapeHtml(tea.brand)} ${escapeHtml(tea.product)} · parameters hidden</p>
+          </div>
+          <button class="sheet-close" data-action="close-sheet" aria-label="Close">✕</button>
+        </div>
+
+        <div class="field" style="margin-top:8px">
+          <div class="field-label"><span class="lab">Overall</span><span class="field-val">${d.overall ? RATING_LABELS[d.overall] : 'pick one'}</span></div>
+          <div class="rating-scale">
+            ${[1,2,3,4,5,6,7].map(n => `<button type="button" class="rating-dot ${d.overall === n ? 'active' : ''}" data-action="set-rating" data-field="overall" data-value="${n}" aria-label="${RATING_LABELS[n]}">${n}</button>`).join('')}
+          </div>
+          <div class="rating-labels"><span>pour away</span><span>bad</span><span>meh</span><span>fine</span><span>good</span><span>very good</span><span>best cup</span></div>
+        </div>
+
+        <div class="tag-field">
+          <div class="field-label"><span class="lab">Strength</span></div>
+          ${segHtml('strength', d.strength, [{v:-1,label:'Too weak'},{v:0,label:'Right'},{v:1,label:'Too strong'}])}
+        </div>
+
+        <div class="tag-field">
+          <div class="field-label"><span class="lab">Bitterness / astringency</span></div>
+          ${segHtml('bitterness', d.bitterness, [{v:-1,label:'None'},{v:0,label:'Some'},{v:1,label:'Harsh'}])}
+        </div>
+
+        <div class="tag-field">
+          <div class="field-label"><span class="lab">Milk</span></div>
+          ${hasMilk ? segHtml('milk', d.milk, [{v:-1,label:'Too little'},{v:0,label:'Right'},{v:1,label:'Too much'}]) : `<div class="pill">No milk in this cup</div>`}
+        </div>
+
+        <div class="tag-field">
+          <div class="switch-row">
+            <div><div class="field-label" style="margin:0"><span class="lab">Would brew again</span></div><p class="hint" style="margin:3px 0 0">A robust yes/no alongside the 1–7 score.</p></div>
+            <label class="switch"><input type="checkbox" data-sheet-field="wouldRepeat" ${d.wouldRepeat ? 'checked' : ''}><span></span></label>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label"><label for="rater">Rater</label></div>
+          <select id="rater" data-sheet-field="rater">
+            ${state.settings.raters.map(r => `<option value="${escapeHtml(r)}" ${r === d.rater ? 'selected' : ''}>${escapeHtml(r)}</option>`).join('')}
+          </select>
+        </div>
+
+        <button class="btn btn-primary btn-wide" data-action="save-rating" ${d.overall ? '' : 'disabled style="opacity:.45"'}>Save rating</button>
+        <p class="hint" style="text-align:center">The parameters stay hidden until you save, so the score is about the cup — not what you expect.</p>
+      </div>
+    </div>`;
+}
+
+function setRatingField(field, value) {
+  if (!ui.sheet || ui.sheet.type !== 'rating') return;
+  ui.sheet.draft[field] = value;
+  renderSheetOnly();
+}
+
+function saveRating() {
+  if (!ui.sheet || ui.sheet.type !== 'rating') return;
+  const {brewId, ratingId, draft} = ui.sheet;
+  if (!draft.overall) return toast('Pick an overall rating first');
+  const brew = state.brews.find(b => b.id === brewId);
+  if (!brew) return;
+  const payload = {
+    overall: Number(draft.overall),
+    strength: Number(draft.strength || 0),
+    bitterness: Number(draft.bitterness || 0),
+    milk: Number(draft.milk || 0),
+    wouldRepeat: !!draft.wouldRepeat,
+    rater: draft.rater || state.settings.raters[0] || 'Alex',
+    blinded: true
+  };
+  if (ratingId) {
+    const r = brew.ratings.find(x => x.id === ratingId);
+    if (r) Object.assign(r, payload, {ts: Date.now()});
+  } else {
+    brew.ratings.push(Object.assign({id: uid(), ts: Date.now()}, payload));
+  }
+  saveState();
+  ui.sheet = null;
+  render();
+  toast('Rating saved');
+}
+
+/* ---------- DETAIL SHEET ---------- */
+function openDetail(brewId) {
+  ui.sheet = {type: 'detail', brewId};
+  render();
+}
+
+function detailSheetHtml() {
+  const brew = state.brews.find(b => b.id === ui.sheet.brewId);
+  if (!brew) return '';
+  const tea = getTea(brew.teaId);
+  const conc = round1((tea.bagMassG / brew.waterMl) * 1000);
+  const milkFrac = brew.milkMl ? fmtPct(brew.milkMl / (brew.waterMl + brew.milkMl)) : 'None';
+  return `
+    <div class="overlay" data-action="close-sheet">
+      <div class="sheet" role="dialog" aria-modal="true" aria-label="Brew detail">
+        <div class="sheet-head">
+          <div>
+            <div class="eyebrow">${fmtDate(brew.ts)}</div>
+            <h2>${escapeHtml(tea.brand)} ${escapeHtml(tea.product)}</h2>
+            <p class="muted" style="font-size:11px;margin:0">${escapeHtml(teaMeta(tea))}</p>
+          </div>
+          <button class="sheet-close" data-action="close-sheet" aria-label="Close">✕</button>
+        </div>
+
+        <div class="detail-grid">
+          <div class="detail-item"><span>Steep</span><b>${fmtSteep(brew.steepS)}</b></div>
+          <div class="detail-item"><span>Temperature</span><b>${brew.tempC}°C</b></div>
+          <div class="detail-item"><span>Water</span><b>${fmtMl(brew.waterMl)}</b></div>
+          <div class="detail-item"><span>Milk</span><b>${brew.milkMl ? `${fmtMl(brew.milkMl)} · ${milkFrac}` : 'None'}</b></div>
+          <div class="detail-item"><span>Concentration</span><b>${conc} g/L</b></div>
+          <div class="detail-item"><span>Handling</span><b>${escapeHtml(HANDLING_LABELS[brew.handling] || brew.handling)}</b></div>
+          <div class="detail-item"><span>Cup</span><b>${brew.preheat ? 'Preheated' : 'Cold'}</b></div>
+          <div class="detail-item"><span>Bag</span><b>${tea.bagMassG}g · ${escapeHtml(tea.bagFormat)}</b></div>
+        </div>
+
+        ${brew.notes ? `<p class="hint" style="margin-top:0"><b>Note:</b> ${escapeHtml(brew.notes)}</p>` : ''}
+
+        <div class="section-head" style="margin-top:18px"><h3>Ratings</h3><span class="pill">${brew.ratings.length}</span></div>
+        ${brew.ratings.length ? brew.ratings.map(r => `
+          <div class="rating-row">
+            <div class="rating-row-head"><b>${escapeHtml(r.rater)}</b><span>${r.overall}/7 · ${fmtDate(r.ts)}${r.blinded ? ' · blind' : ''}</span></div>
+            <div class="rating-tags">
+              <span>${r.strength < 0 ? 'too weak' : r.strength > 0 ? 'too strong' : 'strength right'}</span>
+              <span>${r.bitterness < 0 ? 'no bitterness' : r.bitterness > 0 ? 'harsh' : 'some bitterness'}</span>
+              ${brew.milkMl ? `<span>${r.milk < 0 ? 'too little milk' : r.milk > 0 ? 'too much milk' : 'milk right'}</span>` : '<span>no milk</span>'}
+              <span>${r.wouldRepeat ? 'would repeat' : 'would not repeat'}</span>
+            </div>
+          </div>`).join('') : `<p class="hint">No rating yet. Rate it while the cup is fresh, or add a second rater after they taste it.</p>`}
+
+        <div class="btn-row">
+          <button class="btn btn-soft" data-action="add-rating" data-id="${brew.id}">Add rating</button>
+          <button class="btn btn-primary" data-action="brew-again" data-id="${brew.id}">Brew again</button>
+        </div>
+        <button class="btn btn-ghost btn-wide btn-small" style="margin-top:10px" data-action="delete-brew" data-id="${brew.id}">Delete this brew</button>
+      </div>
+    </div>`;
+}
+
+function brewAgain(id) {
+  const b = state.brews.find(x => x.id === id);
+  if (!b) return;
+  form = {
+    teaId: b.teaId, waterMl: b.waterMl, milkMl: b.milkMl, tempC: b.tempC,
+    handling: b.handling, preheat: b.preheat, notes: '', targetSteepS: b.steepS
+  };
+  state.settings.lastRecipe = clone(form);
+  saveState();
+  ui.sheet = null;
+  ui.tab = 'brew';
+  render();
+  toast('Recipe loaded — bag in when ready');
+}
+
+function deleteBrew(id) {
+  if (!confirm('Delete this brew and its ratings? This cannot be undone.')) return;
+  state.brews = state.brews.filter(b => b.id !== id);
+  saveState();
+  ui.sheet = null;
+  render();
+  toast('Brew deleted');
+}
+
+/* ---------- SETTINGS ---------- */
+function settingsSheetHtml() {
+  const s = state.settings;
+  return `
+    <div class="overlay" data-action="close-sheet">
+      <div class="sheet" role="dialog" aria-modal="true" aria-label="Settings">
+        <div class="sheet-head">
+          <div><div class="eyebrow">Settings</div><h2>House & data</h2></div>
+          <button class="sheet-close" data-action="close-sheet" aria-label="Close">✕</button>
+        </div>
+
+        <div class="setting-group">
+          <label>Raters</label>
+          <div class="chips">${s.raters.map(r => `<span class="rater-chip">${escapeHtml(r)}<button data-action="remove-rater" data-name="${escapeHtml(r)}" aria-label="Remove ${escapeHtml(r)}">×</button></span>`).join('')}</div>
+          <div class="inline"><input id="new-rater" type="text" placeholder="Add a rater"><button data-action="add-rater">Add</button></div>
+        </div>
+
+        <div class="setting-group">
+          <label>Kettle offset</label>
+          <input type="number" step="1" min="-10" max="10" data-setting="kettleOffsetC" value="${Number(s.kettleOffsetC || 0)}">
+          <p class="hint">Measured pour temperature minus kettle setpoint. If your kettle says 100°C but pours at 94°C, use −6.</p>
+        </div>
+
+        <div class="setting-group">
+          <label>Water (house constant)</label>
+          <div class="inline" style="gap:8px">
+            <input type="number" step="1" min="0" data-setting="waterHardnessPpm" value="${s.waterHardnessPpm ?? ''}" placeholder="Hardness ppm">
+            <input type="number" step="1" min="0" data-setting="waterAlkalinityPpm" value="${s.waterAlkalinityPpm ?? ''}" placeholder="Alkalinity ppm">
+          </div>
+          <p class="hint">Record once. Water chemistry is a strong effect but a house constant, not a per-brew slider.</p>
+        </div>
+
+        <div class="setting-group">
+          <label>Data</label>
+          <button class="data-btn" data-action="load-demo">Load demo data <span>fictional cups</span></button>
+          <button class="data-btn" data-action="export">Export JSON <span>backup</span></button>
+          <button class="data-btn" data-action="import">Import JSON <span>replace all</span></button>
+          <button class="data-btn danger" data-action="reset">Reset all data <span>cannot undo</span></button>
+          <input type="file" id="import-file" accept="application/json" hidden>
+        </div>
+
+        <p class="hint" style="text-align:center;margin-top:18px">teaelle demo · local-first · data stays on this device. No account, no server, no telemetry.</p>
+      </div>
+    </div>`;
+}
+
+function teaSheetHtml() {
+  return `
+    <div class="overlay" data-action="close-sheet">
+      <div class="sheet" role="dialog" aria-modal="true" aria-label="Add a tea">
+        <div class="sheet-head">
+          <div><div class="eyebrow">Tea library</div><h2>Add a tea</h2><p class="muted" style="font-size:11px;margin:0">Brand, product and bag mass — not brand alone.</p></div>
+          <button class="sheet-close" data-action="close-sheet" aria-label="Close">✕</button>
+        </div>
+        <div class="field">
+          <div class="field-label"><label for="tea-brand">Brand</label></div>
+          <input id="tea-brand" type="text" placeholder="e.g. Yorkshire Tea">
+        </div>
+        <div class="field">
+          <div class="field-label"><label for="tea-product">Product / blend</label></div>
+          <input id="tea-product" type="text" placeholder="e.g. Gold">
+        </div>
+        <div class="field">
+          <div class="field-label"><label for="tea-type">Tea type</label></div>
+          <select id="tea-type">${TEA_TYPES.map(t => `<option value="${t}">${t}</option>`).join('')}</select>
+        </div>
+        <div class="field">
+          <div class="field-label"><label for="tea-mass">Bag mass</label><span class="field-val">grams</span></div>
+          <input id="tea-mass" type="number" step="0.1" min="0.5" max="10" value="3.0">
+        </div>
+        <div class="field">
+          <div class="field-label"><label for="tea-format">Bag format</label></div>
+          <select id="tea-format"><option value="paper">paper</option><option value="mesh">mesh</option><option value="pyramid">pyramid</option><option value="loose">loose</option></select>
+        </div>
+        <div class="field">
+          <div class="field-label"><label for="tea-temp">Suggested temperature</label><span class="field-val">°C</span></div>
+          <input id="tea-temp" type="number" step="1" min="60" max="100" value="95">
+        </div>
+        <div class="field">
+          <div class="field-label"><label for="tea-steep">Suggested steep</label><span class="field-val">seconds</span></div>
+          <input id="tea-steep" type="number" step="5" min="30" max="600" value="180">
+        </div>
+        <button class="btn btn-primary btn-wide" data-action="save-tea">Add to library</button>
+        <p class="hint" style="text-align:center">Bag mass is the hidden confound: 2g and 3.2g bags are not the same tea at the same volume.</p>
+      </div>
+    </div>`;
+}
+
+function saveTea() {
+  const brand = ($('#tea-brand')?.value || '').trim();
+  const product = ($('#tea-product')?.value || '').trim();
+  if (!brand || !product) return toast('Add a brand and a product');
+  const tea = {
+    id: 'tea-' + uid(),
+    brand, product,
+    type: $('#tea-type').value,
+    bagMassG: Number($('#tea-mass').value) || 2,
+    bagFormat: $('#tea-format').value,
+    targetTempC: Number($('#tea-temp').value) || 95,
+    targetSteepS: Number($('#tea-steep').value) || 180
+  };
+  state.teas.push(tea);
+  form.teaId = tea.id;
+  form.tempC = tea.targetTempC;
+  form.targetSteepS = tea.targetSteepS;
+  if (tea.type === 'green' || tea.type === 'herbal') form.milkMl = 0;
+  state.settings.lastRecipe = clone(form);
+  saveState();
+  ui.sheet = null;
+  render();
+  toast(`${tea.brand} ${tea.product} added`);
+}
+
+function addRater() {
+  const input = $('#new-rater');
+  if (!input) return;
+  const name = input.value.trim();
+  if (!name) return toast('Type a name first');
+  if (state.settings.raters.includes(name)) return toast('That rater already exists');
+  state.settings.raters.push(name);
+  saveState();
+  renderSheetOnly();
+  toast(`Added ${name}`);
+}
+
+function removeRater(name) {
+  if (state.settings.raters.length <= 1) return toast('Keep at least one rater');
+  state.settings.raters = state.settings.raters.filter(r => r !== name);
+  saveState();
+  renderSheetOnly();
+}
+
+/* ---------- DATA ---------- */
+function loadDemo() {
+  if (state.brews.length && !confirm('Replace the current data with the fictional demo set?')) return;
+  const demo = makeDemoData();
+  state.teas = demo.teas;
+  state.brews = demo.brews;
+  state.settings.lastRecipe = null;
+  saveState();
+  ui.sheet = null;
+  ui.tab = 'insights';
+  ui.insightTeaId = demo.teas[0].id;
+  ui.insightRater = null;
+  render();
+  toast('Demo data loaded — fictional cups');
+}
+
+function exportJson() {
+  const payload = {app: 'steep', version: 1, exportedAt: new Date().toISOString(), data: state};
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `teaelle-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast('Export started');
+}
+
+function importJson(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const payload = JSON.parse(reader.result);
+      const data = payload.data || payload;
+      if (!data || !Array.isArray(data.teas) || !Array.isArray(data.brews)) throw new Error('bad format');
+      if (!confirm('Replace all current data with this import?')) return;
+      state = data;
+      state.settings = Object.assign(freshState().settings, state.settings || {});
+      saveState();
+      ui.sheet = null;
+      ui.tab = 'history';
+      render();
+      toast('Import complete');
+    } catch (e) {
+      toast('Could not read that JSON file');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function resetAll() {
+  if (!confirm('Reset everything? All brews, ratings and settings will be deleted.')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(ACTIVE_KEY);
+  state = freshState();
+  activeBrew = null;
+  form = {teaId: state.teas[0].id, waterMl: 250, milkMl: 20, tempC: state.teas[0].targetTempC, handling: 'none', preheat: false, notes: '', targetSteepS: state.teas[0].targetSteepS};
+  ui = {tab: 'brew', historyFilter: 'all', insightTeaId: null, insightRater: null, sheet: null};
+  render();
+  toast('Reset complete');
+}
+
+/* ---------- demo data ---------- */
+function mulberry32(a) {
+  return function() {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function makeDemoData() {
+  const rng = mulberry32(20261112);
+  const randn = () => {
+    let u = 0, v = 0;
+    while (!u) u = rng();
+    while (!v) v = rng();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  };
+  const pick = arr => arr[Math.floor(rng() * arr.length)];
+  const teas = clone(DEFAULT_TEAS);
+  const brews = [];
+  const plan = [
+    {teaId: 'yorkshire-gold', n: 40},
+    {teaId: 'twinings-eb', n: 24},
+    {teaId: 'twinings-green', n: 18}
+  ];
+  let ts = Date.now() - 2 * 3600 * 1000;
+  const notesPool = [
+    'New bag opened today.', 'Bag split slightly on the squeeze.', 'Kettle had just boiled twice.',
+    'Drank this one slower — still good.', 'Milk was cold from the fridge.', 'Slightly distracted; bag stayed in longer.'
+  ];
+
+  for (const p of plan) {
+    const tea = teas.find(t => t.id === p.teaId);
+    const green = tea.type === 'green';
+    for (let i = 0; i < p.n; i++) {
+      const core = rng() < 0.62;
+      const waterMl = Math.round((core ? 240 + rng() * 50 : (green ? 210 + rng() * 70 : 220 + rng() * 100)) / 5) * 5;
+      const milkMl = green ? 0 : Math.round((core ? 10 + rng() * 25 : rng() * 42) / 5) * 5;
+      const tempC = Math.round(green ? (core ? 74 + rng() * 10 : 70 + rng() * 16) : (core ? 88 + rng() * 10 : 80 + rng() * 20));
+      const steepS = Math.round(green ? (core ? 120 + rng() * 60 : 90 + rng() * 110) : (core ? 165 + rng() * 80 : 120 + rng() * 210));
+      const handling = pick(['none', 'none', 'none', 'dunk', 'squeeze']);
+      const preheat = rng() < 0.5;
+      const conc = (tea.bagMassG / waterMl) * 1000;
+      const milkFrac = milkMl / (waterMl + milkMl);
+      const optTemp = green ? 78 : 93;
+      const optTime = green ? 150 : 200;
+      const optConc = green ? 8 : 12.8;
+      const optMilk = green ? 0 : 0.08;
+      const tPen = Math.pow(Math.log(steepS / optTime) / (green ? 0.30 : 0.32), 2);
+      const tempPen = Math.pow((tempC - optTemp) / (green ? 5 : 6), 2);
+      const concPen = Math.pow((conc - optConc) / (green ? 2 : 2.5), 2);
+      const milkPen = green ? 0 : Math.pow((milkFrac - optMilk) / 0.055, 2);
+      let score = (green ? 6.0 : 6.1)
+        - 1.10 * tPen
+        - 0.80 * tempPen
+        - 0.45 * concPen
+        - 0.90 * milkPen
+        + (handling === 'dunk' ? 0.12 : handling === 'squeeze' ? -0.20 : 0)
+        + (preheat ? 0.08 : 0)
+        + randn() * 0.38;
+      score = clamp(score, 1.2, 6.9);
+      const overall = clamp(Math.round(score), 1, 7);
+      const ratings = [];
+      const unrated = (i % 9 === 4);
+      if (!unrated) {
+        ratings.push({
+          id: uid(), rater: 'Alex', overall,
+          strength: overall <= 2 ? 1 : rng() < 0.18 ? -1 : 0,
+          bitterness: overall <= 3 ? 1 : rng() < 0.2 ? 1 : rng() < 0.35 ? -1 : 0,
+          milk: green ? 0 : rng() < 0.2 ? -1 : rng() < 0.15 ? 1 : 0,
+          wouldRepeat: overall >= 4,
+          blinded: rng() < 0.7,
+          ts: ts + 6 * 60 * 1000
+        });
+      }
+      if (rng() < 0.28) {
+        let eScore = score + 0.12 - (green ? 0 : 5 * Math.abs(milkFrac - 0.12)) + randn() * 0.4;
+        const eOverall = clamp(Math.round(eScore), 1, 7);
+        ratings.push({
+          id: uid(), rater: 'Ellen', overall: eOverall,
+          strength: eOverall <= 2 ? 1 : rng() < 0.2 ? -1 : 0,
+          bitterness: eOverall <= 3 ? 1 : rng() < 0.25 ? 1 : 0,
+          milk: green ? 0 : rng() < 0.25 ? -1 : rng() < 0.1 ? 1 : 0,
+          wouldRepeat: eOverall >= 4,
+          blinded: true,
+          ts: ts + 11 * 60 * 1000
+        });
+      }
+      brews.push({
+        id: uid(), ts, teaId: tea.id, waterMl, milkMl, tempC, steepS, handling, preheat,
+        notes: rng() < 0.1 ? pick(notesPool) : '', ratings
+      });
+      ts -= Math.round((6 + rng() * 16) * 3600 * 1000);
+    }
+  }
+  brews.sort((a, b) => b.ts - a.ts);
+  return {teas, brews};
+}
+
+/* ---------- event wiring ---------- */
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  const action = el.dataset.action;
+
+  if (action === 'close-sheet' && e.target.closest('.sheet') && !e.target.closest('.sheet-close')) return;
+  if (action === 'open-detail' && e.target.closest('[data-action="rate"]')) return;
+
+  switch (action) {
+    case 'tab':
+      ui.tab = el.dataset.tab;
+      render();
+      break;
+    case 'start': startBrew(); break;
+    case 'stop': stopBrew(); break;
+    case 'discard': discardActive(); break;
+    case 'open-settings':
+      ui.sheet = {type: 'settings'};
+      render();
+      break;
+    case 'close-sheet':
+      ui.sheet = null;
+      render();
+      break;
+    case 'rate':
+      e.stopPropagation();
+      openRating(el.dataset.id);
+      break;
+    case 'open-detail':
+      openDetail(el.dataset.id);
+      break;
+    case 'set-rating':
+      setRatingField(el.dataset.field, Number(el.dataset.value));
+      break;
+    case 'save-rating':
+      saveRating();
+      break;
+    case 'add-rating':
+      openRating(el.dataset.id);
+      break;
+    case 'brew-again':
+      brewAgain(el.dataset.id);
+      break;
+    case 'delete-brew':
+      deleteBrew(el.dataset.id);
+      break;
+    case 'filter':
+      ui.historyFilter = el.dataset.filter;
+      render();
+      break;
+    case 'load-demo':
+      loadDemo();
+      break;
+    case 'export':
+      exportJson();
+      break;
+    case 'import':
+      $('#import-file').click();
+      break;
+    case 'reset':
+      resetAll();
+      break;
+    case 'add-rater':
+      addRater();
+      break;
+    case 'add-tea':
+      ui.sheet = {type: 'tea'};
+      render();
+      break;
+    case 'save-tea':
+      saveTea();
+      break;
+    case 'remove-rater':
+      removeRater(el.dataset.name);
+      break;
+    case 'set-form':
+      form[el.dataset.field] = el.dataset.value;
+      state.settings.lastRecipe = clone(form);
+      saveState();
+      render();
+      break;
+    case 'use-cell':
+      form.tempC = Number(el.dataset.temp);
+      form.targetSteepS = Number(el.dataset.time);
+      ui.tab = 'brew';
+      ui.sheet = null;
+      render();
+      toast(`Loaded ${el.dataset.temp}°C · ${fmtSteep(Number(el.dataset.time))}`);
+      break;
+    default:
+      break;
+  }
+});
+
+document.addEventListener('change', e => {
+  const el = e.target;
+  if (el.matches('[data-insight-tea]')) {
+    ui.insightTeaId = el.value;
+    render();
+  }
+  if (el.matches('[data-insight-rater]')) {
+    ui.insightRater = el.value;
+    render();
+  }
+  if (el.matches('[data-form="teaId"]')) {
+    form.teaId = el.value;
+    const tea = getTea(el.value);
+    form.tempC = tea.targetTempC;
+    form.targetSteepS = tea.targetSteepS;
+    if (tea.type === 'green' || tea.type === 'herbal') form.milkMl = 0;
+    state.settings.lastRecipe = clone(form);
+    saveState();
+    render();
+  }
+  if (el.matches('[data-sheet-field="wouldRepeat"]')) {
+    if (ui.sheet && ui.sheet.type === 'rating') ui.sheet.draft.wouldRepeat = el.checked;
+  }
+  if (el.matches('[data-sheet-field="rater"]')) {
+    if (ui.sheet && ui.sheet.type === 'rating') ui.sheet.draft.rater = el.value;
+  }
+  if (el.matches('[data-setting]')) {
+    const key = el.dataset.setting;
+    const val = el.value === '' ? null : Number(el.value);
+    state.settings[key] = val;
+    saveState();
+  }
+  if (el.id === 'import-file' && el.files && el.files[0]) {
+    importJson(el.files[0]);
+    el.value = '';
+  }
+});
+
+document.addEventListener('input', e => {
+  const el = e.target;
+  if (el.matches('[data-form]')) {
+    const field = el.dataset.form;
+    let val = el.type === 'checkbox' ? el.checked : el.value;
+    if (el.type === 'range' || el.type === 'number') val = Number(val);
+    form[field] = val;
+    if (field === 'waterMl' || field === 'milkMl') {
+      const tea = getTea(form.teaId);
+      const water = Number(form.waterMl), milk = Number(form.milkMl);
+      const conc = round1((tea.bagMassG / water) * 1000);
+      const mf = fmtPct(milk / (water + milk));
+      if ($('#out-water')) $('#out-water').textContent = Math.round(water);
+      if ($('#out-milk')) $('#out-milk').textContent = Math.round(milk);
+      if ($('#out-conc')) $('#out-conc').textContent = conc;
+      if ($('#out-total')) $('#out-total').textContent = Math.round(water + milk);
+      if ($('#out-milkfrac')) $('#out-milkfrac').textContent = mf;
+    }
+    if (field === 'tempC' && $('#out-temp')) $('#out-temp').textContent = Math.round(form.tempC);
+    state.settings.lastRecipe = clone(form);
+    saveState();
+  }
+});
+
+/* ---------- boot ---------- */
+function renderSheetOnly() {
+  const root = $('#sheet-root');
+  if (!ui.sheet) { root.innerHTML = ''; return; }
+  if (ui.sheet.type === 'rating') root.innerHTML = ratingSheetHtml();
+  else if (ui.sheet.type === 'detail') root.innerHTML = detailSheetHtml();
+  else if (ui.sheet.type === 'settings') root.innerHTML = settingsSheetHtml();
+  else if (ui.sheet.type === 'tea') root.innerHTML = teaSheetHtml();
+}
+
+function render() {
+  $('#view').innerHTML = ui.tab === 'brew' ? renderBrew() : ui.tab === 'history' ? renderHistory() : renderInsights();
+  $$('.tabbar button').forEach(b => b.classList.toggle('active', b.dataset.tab === ui.tab));
+  const badge = $('#badge');
+  const n = state.brews.filter(b => !b.ratings || !b.ratings.length).length;
+  badge.textContent = n || '';
+  badge.style.display = n ? 'grid' : 'none';
+  renderSheetOnly();
+  if (ui.tab === 'brew' && activeBrew) ensureTick();
+}
+
+window.__appErrors = [];
+window.addEventListener('error', e => window.__appErrors.push(String(e.message || e)));
+window.addEventListener('unhandledrejection', e => window.__appErrors.push(String(e.reason || e)));
+
+render();
+
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+}
+</script>
+</body>
+</html>

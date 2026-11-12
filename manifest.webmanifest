@@ -1,0 +1,16 @@
+{
+  "name": "teaelle — Tea Brewing Notebook",
+  "short_name": "teaelle",
+  "description": "A local-first tea brewing notebook that learns from your cups.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f3ecdf",
+  "theme_color": "#2f6b4f",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
