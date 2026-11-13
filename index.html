@@ -691,7 +691,7 @@ function startBrew() {
 }
 
 function stopBrew(id) {
-  const a = activeBrews.find(x => x.id === id) || selectedBrew();
+  const a = id ? activeBrews.find(x => x.id === id) : selectedBrew();
   if (!a) return;
   const steepS = Math.max(1, Math.round((Date.now() - a.startedAt) / 1000));
   const tea = brewTea(a);
@@ -722,7 +722,7 @@ function stopBrew(id) {
 }
 
 function discardActive(id) {
-  const a = activeBrews.find(x => x.id === id) || selectedBrew();
+  const a = id ? activeBrews.find(x => x.id === id) : selectedBrew();
   if (!a) return;
   const who = a.madeFor ? `${a.madeFor}'s brew` : 'this brew';
   if (!confirm(`Discard ${who}? The timer will stop and nothing will be saved.`)) return;
@@ -758,7 +758,7 @@ function openConfirm(brewId) {
 }
 
 function openActiveActuals(id) {
-  const a = activeBrews.find(x => x.id === id) || selectedBrew();
+  const a = id ? activeBrews.find(x => x.id === id) : selectedBrew();
   if (!a) return;
   ui.sheet = {
     type: 'actuals',
