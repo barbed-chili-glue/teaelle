@@ -7,6 +7,8 @@ A mobile-first, local-first tea brewing notebook that learns from your cups.
 ## What it does
 
 - **Brew** — pick a tea product, set water, milk, temperature and bag handling, then start the timer as the bag goes in. Stop it when the bag comes out; a **confirm** sheet lets you correct the actuals (especially milk, weighed after the timer) before saving.
+- **Parallel brews** — each running cup gets its own tab at the top of the Brew screen, labelled with who it is for and showing the time left (or how far over). Tap **+** to start another while the first is still steeping; each brew keeps its own timer, recipe and actuals.
+- **Manual entry** — **Log a brew without the timer** records a cup after the fact: steep time, actuals, date/time and who it was for. Useful when the phone was not to hand or the tea was made in a pot.
 - **Tea library** — add, edit or delete tea products, including the suggested temperature and steep time. Historical brews keep a snapshot of the tea they were brewed with, so deleting a tea never breaks history.
 - **Rate blind** — the rating sheet hides the brewing parameters until you save. Rate overall (1–7), strength, bitterness/astringency, milk balance, and whether you'd brew again. Multiple raters per cup are supported.
 - **History** — unconfirmed cups and unrated cups are queued at the top as **needs attention**; every brew keeps its parameters, tea snapshot and all of its ratings.
