@@ -144,6 +144,26 @@
   .tabbar button svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
   .tabbar button.active{color:var(--accent)}
   .tabbar .badge{position:absolute;top:0;right:calc(50% - 18px);min-width:16px;height:16px;border-radius:99px;background:var(--amber);color:#fff;font-size:9px;display:grid;place-items:center;padding:0 4px}
+  /* parallel brews — one tab per cup in progress */
+  .brew-strip{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 10px;margin:0 -2px 12px;scrollbar-width:none}
+  .brew-strip::-webkit-scrollbar{display:none}
+  .brew-tab{flex:0 0 auto;min-width:106px;border:1px solid var(--line);background:var(--card);border-radius:16px;padding:9px 12px;text-align:left;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:2px;color:var(--ink)}
+  .brew-tab.active{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 10px 22px rgba(47,107,79,.24)}
+  .brew-tab-name{font-size:12.5px;font-weight:800;line-height:1.1;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .brew-tab-time{font-family:Georgia,serif;font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.2px}
+  .brew-tab-tea{font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .brew-tab.active .brew-tab-tea{color:#bcd6c6}
+  .brew-tab.active .brew-tab-time{color:#dff0e4}
+  .brew-tab.due{border-color:var(--amber);background:var(--amber-soft);color:#7a4e1b}
+  .brew-tab.due .brew-tab-time{color:var(--danger)}
+  .brew-tab.due.active{background:var(--amber);border-color:var(--amber);color:#fff}
+  .brew-tab.due.active .brew-tab-time{color:#fff}
+  .brew-add{flex:0 0 auto;border:1px dashed var(--line);background:transparent;border-radius:16px;min-width:66px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;color:var(--accent);font-weight:800;padding:8px}
+  .brew-add span{font-size:20px;line-height:1}
+  .brew-add small{font-size:9px;text-transform:uppercase;letter-spacing:.08em}
+  .brew-add.active{background:var(--accent-soft);border-style:solid}
+  .manual-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .manual-grid .field{margin-bottom:8px}
   .overlay{position:fixed;inset:0;background:rgba(24,18,12,.38);display:flex;align-items:flex-end;justify-content:center;z-index:50;animation:fade .18s ease}
   .sheet{width:100%;max-width:560px;background:var(--card);border-radius:26px 26px 0 0;max-height:94vh;overflow:auto;padding:18px 20px calc(24px + env(safe-area-inset-bottom));animation:slide .24s cubic-bezier(.2,.8,.2,1)}
   @keyframes slide{from{transform:translateY(26px);opacity:.6}to{transform:translateY(0);opacity:1}}
@@ -361,31 +381,42 @@ function saveState() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
 }
 
-function loadActive() {
+function loadActiveList() {
   try {
     const raw = localStorage.getItem(ACTIVE_KEY);
-    if (!raw) return null;
-    const a = JSON.parse(raw);
-    if (a && !a.teaSnapshot) {
-      const t = state.teas.find(x => x.id === a.teaId);
-      if (t) a.teaSnapshot = teaSnapshot(t);
-    }
-    return a;
-  } catch (e) { return null; }
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    // v1 stored a single brew object. v3 stores an array of sessions.
+    const list = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
+    const migrated = list.map(a => {
+      if (!a || !a.startedAt) return null;
+      if (!a.id) a.id = uid();
+      if (!a.teaSnapshot) {
+        const t = state.teas.find(x => x.id === a.teaId);
+        if (t) a.teaSnapshot = teaSnapshot(t);
+      }
+      if (a.madeFor === undefined) a.madeFor = '';
+      return a;
+    }).filter(Boolean);
+    if (!Array.isArray(parsed)) localStorage.setItem(ACTIVE_KEY, JSON.stringify(migrated));
+    return migrated;
+  } catch (e) { return []; }
 }
 
 function saveActive() {
   try {
-    if (activeBrew) localStorage.setItem(ACTIVE_KEY, JSON.stringify(activeBrew));
+    if (activeBrews.length) localStorage.setItem(ACTIVE_KEY, JSON.stringify(activeBrews));
     else localStorage.removeItem(ACTIVE_KEY);
   } catch (e) {}
 }
 
 let state = loadState();
-let activeBrew = loadActive();
+let activeBrews = loadActiveList();
 let tick = null;
+let alerted = new Set();
 let ui = {
   tab: 'brew',
+  brewView: activeBrews.length ? activeBrews[0].id : 'new',
   historyFilter: 'all',
   insightTeaId: null,
   insightRater: null,
@@ -407,17 +438,11 @@ function defaultRater() {
 
 let form = (() => {
   const lr = state.settings.lastRecipe;
-  if (activeBrew) {
-    return {
-      teaId: activeBrew.teaId, waterMl: activeBrew.waterMl, milkMl: activeBrew.milkMl,
-      tempC: activeBrew.tempC, handling: activeBrew.handling, preheat: activeBrew.preheat,
-      notes: activeBrew.notes || '', targetSteepS: activeBrew.targetSteepS
-    };
-  }
-  if (lr && state.teas.some(t => t.id === lr.teaId)) return Object.assign({}, lr);
+  const madeFor = state.settings.raters[0] || '';
+  if (lr && state.teas.some(t => t.id === lr.teaId)) return Object.assign({madeFor}, lr);
   const t = state.teas[0];
-  if (!t) return {teaId: null, waterMl: 250, milkMl: 20, tempC: 95, handling: 'none', preheat: false, notes: '', targetSteepS: 180};
-  return {teaId: t.id, waterMl: 250, milkMl: 20, tempC: t.targetTempC, handling: 'none', preheat: false, notes: '', targetSteepS: t.targetSteepS};
+  if (!t) return {teaId: null, waterMl: 250, milkMl: 20, tempC: 95, handling: 'none', preheat: false, notes: '', targetSteepS: 180, madeFor};
+  return {teaId: t.id, waterMl: 250, milkMl: 20, tempC: t.targetTempC, handling: 'none', preheat: false, notes: '', targetSteepS: t.targetSteepS, madeFor};
 })();
 
 /* ---------- shared render helpers ---------- */
@@ -436,55 +461,117 @@ function segHtml(field, value, options) {
 }
 
 /* ---------- BREW VIEW ---------- */
+function selectedBrew() {
+  return activeBrews.find(b => b.id === ui.brewView) || activeBrews[0] || null;
+}
+
+function elapsedOf(b) {
+  return Math.max(0, Math.floor((Date.now() - b.startedAt) / 1000));
+}
+
+function targetOf(b) {
+  return Number(b.targetSteepS || brewTea(b).targetSteepS || 180);
+}
+
+function leftText(b) {
+  const left = targetOf(b) - elapsedOf(b);
+  return left >= 0 ? `${fmtSteep(left)} left` : `${fmtSteep(-left)} over`;
+}
+
+function brewTabsHtml() {
+  if (!activeBrews.length) return '';
+  const counts = activeBrews.reduce((m, b) => {
+    const k = b.madeFor || 'Brew';
+    m[k] = (m[k] || 0) + 1;
+    return m;
+  }, {});
+  const tabs = activeBrews.map(b => {
+    const left = targetOf(b) - elapsedOf(b);
+    const active = ui.brewView === b.id;
+    const label = b.madeFor || 'Brew';
+    const teaLine = counts[label] > 1 ? `<span class="brew-tab-tea">${escapeHtml(brewTea(b).product)}</span>` : '';
+    return `<button class="brew-tab ${active ? 'active' : ''} ${left < 0 ? 'due' : ''}" data-action="select-brew" data-id="${b.id}" role="tab" aria-selected="${active}" title="${escapeHtml(teaName(brewTea(b)))} · target ${fmtSteep(targetOf(b))}">
+      <span class="brew-tab-name">${escapeHtml(label)}</span>
+      ${teaLine}
+      <span class="brew-tab-time" data-brew-time="${b.id}">${leftText(b)}</span>
+    </button>`;
+  }).join('');
+  const addActive = ui.brewView === 'new';
+  return `<div class="brew-strip" role="tablist" aria-label="Brews in progress">${tabs}
+    <button class="brew-add ${addActive ? 'active' : ''}" data-action="new-brew" aria-label="Start another brew"><span>+</span><small>New</small></button>
+  </div>`;
+}
+
 function renderBrew() {
-  const tea = activeBrew ? brewTea(activeBrew) : getTea(form.teaId);
+  const strip = brewTabsHtml();
+  const brew = ui.brewView === 'new' ? null : selectedBrew();
+  if (!brew) return strip + renderNewCup();
+  return strip + renderActiveBrew(brew);
+}
+
+function renderActiveBrew(b) {
+  const tea = brewTea(b);
+  const target = targetOf(b);
+  const elapsed = elapsedOf(b);
+  const pct = clamp(elapsed / target * 100, 0, 100);
+  const left = target - elapsed;
+  return `
+    <section class="timer-card">
+      <div class="eyebrow">Steeping${b.madeFor ? ` for ${escapeHtml(b.madeFor)}` : ''}</div>
+      <div class="timer" id="timer-display" data-brew-id="${b.id}">${fmtSteep(elapsed)}</div>
+      <div class="timer-sub">${escapeHtml(teaName(tea))} · ${tea.bagMassG}g bag</div>
+      <div class="timer-target"><span id="timer-left">${leftText(b)}</span><span id="timer-clock">${fmtSteep(elapsed)} elapsed</span></div>
+      <div class="progress"><i id="timer-progress" class="${left < 0 ? 'over' : ''}" style="width:${pct}%"></i></div>
+      <button class="btn btn-amber btn-wide" data-action="stop" data-id="${b.id}">Bag out — stop timer</button>
+      <div style="height:8px"></div>
+      <button class="btn btn-ghost btn-wide btn-small" data-action="discard" data-id="${b.id}">Discard this brew</button>
+    </section>
+    <section class="card">
+      <div class="section-head"><h3>Recipe in progress</h3><button class="link" data-action="edit-active" data-id="${b.id}">Edit actuals</button></div>
+      <div class="detail-grid">
+        <div class="detail-item"><span>Water</span><b>${fmtMl(b.waterMl)}</b></div>
+        <div class="detail-item"><span>Milk</span><b>${b.milkMl ? fmtMl(b.milkMl) : 'None'}</b></div>
+        <div class="detail-item"><span>Temperature</span><b>${b.tempC}°C</b></div>
+        <div class="detail-item"><span>Cup</span><b>${b.preheat ? 'Preheated' : 'Cold'}</b></div>
+        <div class="detail-item"><span>Handling</span><b>${escapeHtml(HANDLING_LABELS[b.handling] || b.handling)}</b></div>
+        <div class="detail-item"><span>Target</span><b>${fmtSteep(target)}</b></div>
+      </div>
+      <p class="hint">You can put the phone down — the elapsed time is stored as a timestamp, so it keeps counting even if the screen locks. Tap “+” above to start another cup alongside this one; each brew keeps its own tab and timer.</p>
+    </section>`;
+}
+
+function renderNewCup() {
+  const tea = getTea(form.teaId) || state.teas[0];
   if (!tea) return `
     <section class="card empty">
       <h3>No teas yet</h3>
       <p>Add a tea product to start brewing. You can edit or delete it later in the library.</p>
       <button class="btn btn-primary btn-small" data-action="add-tea">Add a tea</button>
     </section>`;
-  const target = Number((activeBrew ? activeBrew.targetSteepS : form.targetSteepS) || tea.targetSteepS || 180);
-  const elapsed = activeBrew ? elapsedActive() : 0;
-  const pct = clamp(elapsed / target * 100, 0, 100);
-
-  if (activeBrew) {
-    return `
-      <section class="timer-card">
-        <div class="eyebrow">Steeping</div>
-        <div class="timer" id="timer-display">${fmtSteep(elapsed)}</div>
-        <div class="timer-sub">${escapeHtml(teaName(tea))} · ${tea.bagMassG}g bag</div>
-        <div class="timer-target"><span>Target ${fmtSteep(target)}</span><span id="timer-clock">${fmtSteep(elapsed)} elapsed</span></div>
-        <div class="progress"><i id="timer-progress" class="${elapsed > target ? 'over' : ''}" style="width:${pct}%"></i></div>
-        <button class="btn btn-amber btn-wide" data-action="stop">Bag out — stop timer</button>
-        <div style="height:8px"></div>
-        <button class="btn btn-ghost btn-wide btn-small" data-action="discard">Discard this brew</button>
-      </section>
-      <section class="card">
-        <div class="section-head"><h3>Recipe in progress</h3><button class="link" data-action="edit-active">Edit actuals</button></div>
-        <div class="detail-grid">
-          <div class="detail-item"><span>Water</span><b>${fmtMl(activeBrew.waterMl)}</b></div>
-          <div class="detail-item"><span>Milk</span><b>${activeBrew.milkMl ? fmtMl(activeBrew.milkMl) : 'None'}</b></div>
-          <div class="detail-item"><span>Temperature</span><b>${activeBrew.tempC}°C</b></div>
-          <div class="detail-item"><span>Cup</span><b>${activeBrew.preheat ? 'Preheated' : 'Cold'}</b></div>
-          <div class="detail-item"><span>Handling</span><b>${escapeHtml(HANDLING_LABELS[activeBrew.handling] || activeBrew.handling)}</b></div>
-        </div>
-        <p class="hint">You can put the phone down — the elapsed time is stored as a timestamp, so it keeps counting even if the screen locks. If you change the recipe while it steeps, tap “Edit actuals”.</p>
-      </section>`;
-  }
-
+  const target = Number(form.targetSteepS || tea.targetSteepS || 180);
+  const raters = state.settings.raters.length ? state.settings.raters : ['Alex'];
+  const madeFor = raters.includes(form.madeFor) ? form.madeFor : raters[0];
   return `
     <section class="card hero">
-      <div class="eyebrow">New cup</div>
+      <div class="eyebrow">New cup${madeFor ? ` · for ${escapeHtml(madeFor)}` : ''}</div>
       <h2>${escapeHtml(teaName(tea))}</h2>
       <p class="muted" style="font-size:12px;line-height:1.5;margin:0 0 4px">Set the recipe, then start the timer as the bag goes in.</p>
       <div class="idle-timer">0:00</div>
       <div class="timer-target" style="color:var(--muted);margin:0 0 14px"><span>Target ${fmtSteep(target)}</span><span>${tea.type} tea</span></div>
       <button class="btn btn-primary btn-wide" data-action="start">Bag in — start timer</button>
+      <button class="btn btn-ghost btn-wide btn-small" style="margin-top:10px" data-action="open-manual">Log a brew without the timer</button>
     </section>
 
     <section class="card">
       <div class="section-head"><h3>Recipe</h3><div style="display:flex;gap:12px"><button class="link" data-action="open-library">library</button><button class="link" data-action="open-settings">settings</button></div></div>
+
+      <div class="field">
+        <div class="field-label"><span class="lab">Making for</span></div>
+        <div class="seg">
+          ${raters.map(r => `<button type="button" data-action="set-form" data-field="madeFor" data-value="${escapeHtml(r)}" class="${madeFor === r ? 'active' : ''}">${escapeHtml(r)}</button>`).join('')}
+        </div>
+        <p class="hint">This name labels the brew's tab while it steeps, so parallel cups stay straight.</p>
+      </div>
 
       <div class="field">
         <div class="field-label"><label for="tea-select">Tea</label><span class="field-val">${escapeHtml(teaMeta(tea))}</span></div>
@@ -536,92 +623,112 @@ function renderBrew() {
       </div>
 
       <button class="btn btn-primary btn-wide" data-action="start" style="margin-top:6px">Bag in — start timer</button>
+      <button class="btn btn-ghost btn-wide btn-small" style="margin-top:10px" data-action="open-manual">Log a brew without the timer</button>
     </section>`;
-}
-
-function elapsedActive() {
-  if (!activeBrew) return 0;
-  return Math.max(0, Math.floor((Date.now() - activeBrew.startedAt) / 1000));
 }
 
 function ensureTick() {
   if (tick) return;
   tick = setInterval(() => {
-    if (!activeBrew) return;
-    const el = $('#timer-display');
-    if (!el) return;
-    const el2 = elapsedActive();
-    el.textContent = fmtSteep(el2);
+    if (!activeBrews.length) return;
+    activeBrews.forEach(b => {
+      const el = document.querySelector(`[data-brew-time="${b.id}"]`);
+      if (!el) return;
+      el.textContent = leftText(b);
+      const tab = el.closest('.brew-tab');
+      if (tab) tab.classList.toggle('due', targetOf(b) - elapsedOf(b) < 0);
+      const left = targetOf(b) - elapsedOf(b);
+      if (left <= 0 && !alerted.has(b.id)) {
+        alerted.add(b.id);
+        if (navigator.vibrate) { try { navigator.vibrate([120, 60, 120]); } catch (e) {} }
+        toast(b.madeFor ? `${b.madeFor}'s brew is ready — bag out` : 'Brew is ready — bag out');
+      }
+    });
+    if (ui.brewView === 'new') return;
+    const b = selectedBrew();
+    if (!b) return;
+    const display = $('#timer-display');
+    if (!display) return;
+    const elapsed = elapsedOf(b);
+    const target = targetOf(b);
+    display.textContent = fmtSteep(elapsed);
+    const leftEl = $('#timer-left');
+    if (leftEl) leftEl.textContent = leftText(b);
     const clock = $('#timer-clock');
-    if (clock) clock.textContent = `${fmtSteep(el2)} elapsed`;
+    if (clock) clock.textContent = `${fmtSteep(elapsed)} elapsed`;
     const bar = $('#timer-progress');
     if (bar) {
-      const tea = brewTea(activeBrew);
-      const target = Number(activeBrew.targetSteepS || tea.targetSteepS || 180);
-      bar.style.width = clamp(el2 / target * 100, 0, 100) + '%';
-      bar.classList.toggle('over', el2 > target);
+      bar.style.width = clamp(elapsed / target * 100, 0, 100) + '%';
+      bar.classList.toggle('over', elapsed > target);
     }
     const ac = $('#actuals-clock');
-    if (ac) {
-      const tea = brewTea(activeBrew);
-      const target = Number(activeBrew.targetSteepS || tea.targetSteepS || 180);
-      ac.textContent = `${fmtSteep(el2)} / ${fmtSteep(target)}`;
-    }
+    if (ac) ac.textContent = `${fmtSteep(elapsed)} / ${fmtSteep(target)}`;
   }, 250);
 }
 
 function startBrew() {
-  if (activeBrew) return;
   const tea = getTea(form.teaId);
   if (!tea) return toast('Add a tea first');
   if (Number(form.waterMl) < 100) return toast('Add at least 100 ml of water');
   state.settings.lastRecipe = clone(form);
   saveState();
-  activeBrew = {
+  const b = {
+    id: uid(),
+    madeFor: form.madeFor || state.settings.raters[0] || '',
     teaId: tea.id,
     teaSnapshot: teaSnapshot(tea),
     waterMl: Number(form.waterMl), milkMl: Number(form.milkMl),
     tempC: Number(form.tempC), handling: form.handling, preheat: !!form.preheat,
     notes: form.notes || '', targetSteepS: Number(form.targetSteepS || tea.targetSteepS || 180),
-    startedAt: Date.now()
+    startedAt: Date.now(),
+    source: 'timer'
   };
+  activeBrews.push(b);
   saveActive();
+  ui.brewView = b.id;
   render();
-  toast('Timer started — bag in');
+  toast(`Timer started${b.madeFor ? ` for ${b.madeFor}` : ''} — bag in`);
 }
 
-function stopBrew() {
-  if (!activeBrew) return;
-  const steepS = Math.max(1, Math.round((Date.now() - activeBrew.startedAt) / 1000));
-  const tea = brewTea(activeBrew);
+function stopBrew(id) {
+  const a = activeBrews.find(x => x.id === id) || selectedBrew();
+  if (!a) return;
+  const steepS = Math.max(1, Math.round((Date.now() - a.startedAt) / 1000));
+  const tea = brewTea(a);
   const brew = {
     id: uid(),
     ts: Date.now(),
-    teaId: activeBrew.teaId,
+    teaId: a.teaId,
     teaSnapshot: teaSnapshot(tea),
-    waterMl: Number(activeBrew.waterMl),
-    milkMl: Number(activeBrew.milkMl),
-    tempC: Number(activeBrew.tempC),
+    madeFor: a.madeFor || '',
+    waterMl: Number(a.waterMl),
+    milkMl: Number(a.milkMl),
+    tempC: Number(a.tempC),
     steepS,
-    handling: activeBrew.handling,
-    preheat: !!activeBrew.preheat,
-    notes: activeBrew.notes || '',
+    handling: a.handling,
+    preheat: !!a.preheat,
+    notes: a.notes || '',
     confirmed: false,
-    ratings: []
+    ratings: [],
+    source: 'timer'
   };
   state.brews.push(brew);
-  activeBrew = null;
+  activeBrews = activeBrews.filter(x => x.id !== a.id);
   saveActive();
   saveState();
+  ui.brewView = activeBrews.length ? activeBrews[0].id : 'new';
   ui.sheet = {type: 'confirm', brewId: brew.id, mode: 'confirm', draft: confirmDraft(brew)};
   render();
 }
 
-function discardActive() {
-  if (!activeBrew) return;
-  if (!confirm('Discard this brew? The timer will stop and nothing will be saved.')) return;
-  activeBrew = null;
+function discardActive(id) {
+  const a = activeBrews.find(x => x.id === id) || selectedBrew();
+  if (!a) return;
+  const who = a.madeFor ? `${a.madeFor}'s brew` : 'this brew';
+  if (!confirm(`Discard ${who}? The timer will stop and nothing will be saved.`)) return;
+  activeBrews = activeBrews.filter(x => x.id !== a.id);
   saveActive();
+  ui.brewView = activeBrews.length ? activeBrews[0].id : 'new';
   render();
   toast('Brew discarded');
 }
@@ -650,17 +757,19 @@ function openConfirm(brewId) {
   render();
 }
 
-function openActiveActuals() {
-  if (!activeBrew) return;
+function openActiveActuals(id) {
+  const a = activeBrews.find(x => x.id === id) || selectedBrew();
+  if (!a) return;
   ui.sheet = {
     type: 'actuals',
+    brewId: a.id,
     draft: {
-      waterMl: Number(activeBrew.waterMl) || 0,
-      milkMl: Number(activeBrew.milkMl) || 0,
-      tempC: Number(activeBrew.tempC) || 95,
-      handling: activeBrew.handling || 'none',
-      preheat: !!activeBrew.preheat,
-      notes: activeBrew.notes || ''
+      waterMl: Number(a.waterMl) || 0,
+      milkMl: Number(a.milkMl) || 0,
+      tempC: Number(a.tempC) || 95,
+      handling: a.handling || 'none',
+      preheat: !!a.preheat,
+      notes: a.notes || ''
     }
   };
   render();
@@ -679,8 +788,9 @@ function updateActualDerived() {
   if (s.type === 'confirm') {
     const b = state.brews.find(x => x.id === s.brewId);
     tea = b ? brewTea(b) : null;
-  } else if (activeBrew) {
-    tea = brewTea(activeBrew);
+  } else {
+    const a = activeBrews.find(x => x.id === s.brewId);
+    tea = a ? brewTea(a) : null;
   }
   if (!tea) return;
   const d = s.draft;
@@ -742,20 +852,22 @@ function confirmDiscard() {
 }
 
 function saveActiveActuals() {
-  if (!ui.sheet || ui.sheet.type !== 'actuals' || !activeBrew) return;
+  if (!ui.sheet || ui.sheet.type !== 'actuals') return;
+  const a = activeBrews.find(x => x.id === ui.sheet.brewId);
+  if (!a) return;
   const d = ui.sheet.draft;
-  activeBrew.waterMl = Number(d.waterMl) || 0;
-  activeBrew.milkMl = Number(d.milkMl) || 0;
-  activeBrew.tempC = Number(d.tempC) || activeBrew.tempC;
-  activeBrew.handling = d.handling || 'none';
-  activeBrew.preheat = !!d.preheat;
-  activeBrew.notes = d.notes || '';
-  form.waterMl = activeBrew.waterMl;
-  form.milkMl = activeBrew.milkMl;
-  form.tempC = activeBrew.tempC;
-  form.handling = activeBrew.handling;
-  form.preheat = activeBrew.preheat;
-  form.notes = activeBrew.notes;
+  a.waterMl = Number(d.waterMl) || 0;
+  a.milkMl = Number(d.milkMl) || 0;
+  a.tempC = Number(d.tempC) || a.tempC;
+  a.handling = d.handling || 'none';
+  a.preheat = !!d.preheat;
+  a.notes = d.notes || '';
+  form.waterMl = a.waterMl;
+  form.milkMl = a.milkMl;
+  form.tempC = a.tempC;
+  form.handling = a.handling;
+  form.preheat = a.preheat;
+  form.notes = a.notes;
   state.settings.lastRecipe = clone(form);
   saveActive();
   saveState();
@@ -843,18 +955,19 @@ function confirmSheetHtml() {
 }
 
 function actualsSheetHtml() {
-  if (!activeBrew) return '';
+  const a = activeBrews.find(x => x.id === ui.sheet.brewId);
+  if (!a) return '';
   const d = ui.sheet.draft;
-  const tea = brewTea(activeBrew);
-  const target = Number(activeBrew.targetSteepS || tea.targetSteepS || 180);
+  const tea = brewTea(a);
+  const target = targetOf(a);
   return `
     <div class="overlay" data-action="close-sheet">
       <div class="sheet" role="dialog" aria-modal="true" aria-label="Edit actuals">
         <div class="sheet-head">
           <div>
-            <div class="eyebrow">While it steeps</div>
+            <div class="eyebrow">While it steeps${a.madeFor ? ` · for ${escapeHtml(a.madeFor)}` : ''}</div>
             <h2>Edit actuals</h2>
-            <p class="muted" style="font-size:11px;margin:0">${escapeHtml(teaName(tea))} · <span id="actuals-clock">${fmtSteep(elapsedActive())} / ${fmtSteep(target)}</span></p>
+            <p class="muted" style="font-size:11px;margin:0">${escapeHtml(teaName(tea))} · <span id="actuals-clock">${fmtSteep(elapsedOf(a))} / ${fmtSteep(target)}</span></p>
           </div>
           <button class="sheet-close" data-action="close-sheet" aria-label="Close">✕</button>
         </div>
@@ -865,6 +978,166 @@ function actualsSheetHtml() {
         <button class="btn btn-ghost btn-wide btn-small" data-action="close-sheet">Cancel</button>
       </div>
     </div>`;
+}
+
+/* ---------- MANUAL ENTRY ---------- */
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+function localDateTimeValue(ts) {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+function openManual() {
+  const tea = getTea(form.teaId) || state.teas[0];
+  if (!tea) return toast('Add a tea first');
+  const steepS = Number(form.targetSteepS || tea.targetSteepS || 180);
+  ui.sheet = {
+    type: 'manual',
+    draft: Object.assign({}, form, {
+      madeFor: form.madeFor || state.settings.raters[0] || '',
+      steepMin: Math.floor(steepS / 60),
+      steepSec: steepS % 60,
+      when: localDateTimeValue(Date.now())
+    })
+  };
+  render();
+}
+
+function setManualField(field, value) {
+  if (!ui.sheet || ui.sheet.type !== 'manual') return;
+  ui.sheet.draft[field] = value;
+  renderSheetOnly();
+}
+
+function manualSheetHtml() {
+  const d = ui.sheet.draft;
+  const tea = getTea(d.teaId);
+  if (!tea) return '';
+  const water = Number(d.waterMl) || 0;
+  const milk = Number(d.milkMl) || 0;
+  const conc = round1((Number(tea.bagMassG) || 2) / Math.max(1, water) * 1000);
+  const mf = water + milk > 0 ? fmtPct(milk / (water + milk)) : '0%';
+  return `
+    <div class="overlay" data-action="close-sheet">
+      <div class="sheet" role="dialog" aria-modal="true" aria-label="Log a brew">
+        <div class="sheet-head">
+          <div>
+            <div class="eyebrow">Backfill</div>
+            <h2>Log a brew</h2>
+            <p class="muted" style="font-size:11px;margin:0">For cups made without the timer — steep time and actuals entered by hand.</p>
+          </div>
+          <button class="sheet-close" data-action="close-sheet" aria-label="Close">✕</button>
+        </div>
+
+        <div class="field">
+          <div class="field-label"><label>Made at</label></div>
+          <input type="datetime-local" data-manual="when" value="${escapeHtml(d.when)}">
+        </div>
+
+        <div class="field">
+          <div class="field-label"><label for="manual-rater">Making for</label></div>
+          <select id="manual-rater" data-manual="madeFor">
+            ${state.settings.raters.map(r => `<option value="${escapeHtml(r)}" ${r === d.madeFor ? 'selected' : ''}>${escapeHtml(r)}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="field">
+          <div class="field-label"><label for="manual-tea">Tea</label><span class="field-val">${escapeHtml(teaMeta(tea))}</span></div>
+          <select id="manual-tea" data-manual="teaId">
+            ${state.teas.map(t => `<option value="${escapeHtml(t.id)}" ${t.id === d.teaId ? 'selected' : ''}>${escapeHtml(t.brand)} — ${escapeHtml(t.product)}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="manual-grid">
+          <div class="field">
+            <div class="field-label"><label>Steep min</label></div>
+            <input type="number" inputmode="numeric" step="1" min="0" max="20" data-manual="steepMin" value="${Number(d.steepMin) || 0}">
+          </div>
+          <div class="field">
+            <div class="field-label"><label>Steep sec</label></div>
+            <input type="number" inputmode="numeric" step="1" min="0" max="59" data-manual="steepSec" value="${Number(d.steepSec) || 0}">
+          </div>
+          <div class="field">
+            <div class="field-label"><label>Water (ml)</label></div>
+            <input type="number" inputmode="numeric" step="1" min="0" max="500" data-manual="waterMl" value="${water}">
+          </div>
+          <div class="field">
+            <div class="field-label"><label>Milk (ml)</label></div>
+            <input type="number" inputmode="decimal" step="1" min="0" max="200" data-manual="milkMl" value="${milk}">
+          </div>
+          <div class="field">
+            <div class="field-label"><label>Temp (°C)</label></div>
+            <input type="number" inputmode="numeric" step="1" min="40" max="100" data-manual="tempC" value="${Number(d.tempC) || tea.targetTempC}">
+          </div>
+        </div>
+
+        <div class="derived">
+          <span class="pill">Concentration <b id="manual-conc">${conc}</b> g/L</span>
+          <span class="pill">Milk <b id="manual-mf">${mf}</b></span>
+        </div>
+
+        <div class="field">
+          <div class="field-label"><span class="lab">Bag handling</span></div>
+          <div class="seg">
+            ${['none','dunk','squeeze'].map(h => `<button type="button" data-action="set-manual" data-field="handling" data-value="${h}" class="${d.handling === h ? 'active' : ''}">${HANDLING_LABELS[h]}</button>`).join('')}
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="switch-row">
+            <div><div class="field-label" style="margin:0"><span class="lab">Preheated cup</span></div></div>
+            <label class="switch"><input type="checkbox" data-manual="preheat" ${d.preheat ? 'checked' : ''}><span></span></label>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label"><label>Notes</label></div>
+          <textarea data-manual="notes" placeholder="Bag split, milk added after, distracted…">${escapeHtml(d.notes || '')}</textarea>
+        </div>
+
+        <button class="btn btn-primary btn-wide" data-action="save-manual">Save brew</button>
+        <div style="height:8px"></div>
+        <button class="btn btn-ghost btn-wide btn-small" data-action="close-sheet">Cancel</button>
+      </div>
+    </div>`;
+}
+
+function saveManual() {
+  if (!ui.sheet || ui.sheet.type !== 'manual') return;
+  const d = ui.sheet.draft;
+  const tea = getTea(d.teaId);
+  if (!tea) return toast('Pick a tea');
+  const steepS = Math.round((Number(d.steepMin) || 0) * 60 + (Number(d.steepSec) || 0));
+  if (steepS < 10) return toast('Enter a steep time');
+  const waterMl = Number(d.waterMl) || 0;
+  if (waterMl < 100) return toast('Add at least 100 ml of water');
+  const ts = d.when ? new Date(d.when).getTime() : Date.now();
+  if (!Number.isFinite(ts)) return toast('Check the date and time');
+  if (ts > Date.now() + 60000) return toast('That time is in the future');
+  const brew = {
+    id: uid(),
+    ts,
+    teaId: tea.id,
+    teaSnapshot: teaSnapshot(tea),
+    madeFor: d.madeFor || '',
+    waterMl,
+    milkMl: Number(d.milkMl) || 0,
+    tempC: Number(d.tempC) || tea.targetTempC,
+    steepS,
+    handling: d.handling || 'none',
+    preheat: !!d.preheat,
+    notes: d.notes || '',
+    confirmed: true,
+    ratings: [],
+    source: 'manual'
+  };
+  state.brews.push(brew);
+  saveState();
+  ui.sheet = null;
+  ui.tab = 'brew';
+  render();
+  toast('Brew logged — rate it in History');
 }
 
 /* ---------- HISTORY VIEW ---------- */
@@ -916,7 +1189,7 @@ function brewCard(b, showAction) {
     <article class="brew-card" data-action="open-detail" data-id="${b.id}">
       <div class="brew-main">
         <div class="brew-title">${escapeHtml(teaName(tea))}</div>
-        <div class="brew-meta">${fmtDate(b.ts)} · ${fmtSteep(b.steepS)} · ${b.tempC}°C · ${b.waterMl} ml${b.milkMl ? ` + ${b.milkMl} ml milk` : ''}</div>
+        <div class="brew-meta">${b.madeFor ? `for ${escapeHtml(b.madeFor)} · ` : ''}${fmtDate(b.ts)} · ${fmtSteep(b.steepS)} · ${b.tempC}°C · ${b.waterMl} ml${b.milkMl ? ` + ${b.milkMl} ml milk` : ''}</div>
       </div>
       <div class="brew-side">${side}</div>
     </article>`;
@@ -1326,7 +1599,9 @@ function openRating(brewId, ratingId = null) {
     ratingId,
     draft: existing ? Object.assign({}, existing) : {
       overall: 0, strength: 0, bitterness: 0, milk: 0, wouldRepeat: true,
-      rater: state.settings.raters[0] || 'Alex'
+      rater: (brew.madeFor && state.settings.raters.includes(brew.madeFor))
+        ? brew.madeFor
+        : (state.settings.raters[0] || 'Alex')
     }
   };
   render();
@@ -1446,7 +1721,7 @@ function detailSheetHtml() {
           <div>
             <div class="eyebrow">${fmtDate(brew.ts)}</div>
             <h2>${escapeHtml(tea.brand)} ${escapeHtml(tea.product)}</h2>
-            <p class="muted" style="font-size:11px;margin:0">${escapeHtml(teaMeta(tea))}</p>
+            <p class="muted" style="font-size:11px;margin:0">${escapeHtml(teaMeta(tea))}${brew.madeFor ? ` · for ${escapeHtml(brew.madeFor)}` : ''}</p>
           </div>
           <button class="sheet-close" data-action="close-sheet" aria-label="Close">✕</button>
         </div>
@@ -1462,6 +1737,7 @@ function detailSheetHtml() {
           <div class="detail-item"><span>Handling</span><b>${escapeHtml(HANDLING_LABELS[brew.handling] || brew.handling)}</b></div>
           <div class="detail-item"><span>Cup</span><b>${brew.preheat ? 'Preheated' : 'Cold'}</b></div>
           <div class="detail-item"><span>Bag</span><b>${tea.bagMassG}g · ${escapeHtml(tea.bagFormat)}</b></div>
+          ${brew.madeFor ? `<div class="detail-item"><span>Made for</span><b>${escapeHtml(brew.madeFor)}</b></div>` : ''}
         </div>
 
         ${brew.notes ? `<p class="hint" style="margin-top:0"><b>Note:</b> ${escapeHtml(brew.notes)}</p>` : ''}
@@ -1498,12 +1774,14 @@ function brewAgain(id) {
   if (!tea) return toast('That tea is no longer in the library');
   form = {
     teaId: tea.id, waterMl: b.waterMl, milkMl: b.milkMl, tempC: b.tempC,
-    handling: b.handling, preheat: b.preheat, notes: '', targetSteepS: b.steepS
+    handling: b.handling, preheat: b.preheat, notes: '', targetSteepS: b.steepS,
+    madeFor: b.madeFor || form.madeFor || state.settings.raters[0] || ''
   };
   state.settings.lastRecipe = clone(form);
   saveState();
   ui.sheet = null;
   ui.tab = 'brew';
+  ui.brewView = 'new';
   render();
   toast('Recipe loaded — bag in when ready');
 }
@@ -1661,7 +1939,7 @@ function saveTea() {
     const oldTemp = tea.targetTempC;
     const oldSteep = tea.targetSteepS;
     Object.assign(tea, payload);
-    if (form.teaId === tea.id && !activeBrew) {
+    if (form.teaId === tea.id && !activeBrews.length) {
       if (Number(form.tempC) === Number(oldTemp)) form.tempC = tea.targetTempC;
       if (Number(form.targetSteepS) === Number(oldSteep)) form.targetSteepS = tea.targetSteepS;
       state.settings.lastRecipe = clone(form);
@@ -1705,10 +1983,14 @@ function deleteTea(id) {
     state.settings.lastRecipe = state.teas.length ? clone(form) : null;
   }
   if (ui.insightTeaId === id) ui.insightTeaId = null;
-  if (activeBrew && activeBrew.teaId === id) {
-    activeBrew.teaSnapshot = activeBrew.teaSnapshot || teaSnapshot(tea);
-    saveActive();
-  }
+  let activeTouched = false;
+  activeBrews.forEach(a => {
+    if (a.teaId === id && !a.teaSnapshot) {
+      a.teaSnapshot = teaSnapshot(tea);
+      activeTouched = true;
+    }
+  });
+  if (activeTouched) saveActive();
   saveState();
   render();
   toast('Tea deleted — history keeps its details');
@@ -1735,7 +2017,7 @@ function removeRater(name) {
 
 /* ---------- DATA ---------- */
 function loadDemo() {
-  if (activeBrew) return toast('Finish the current brew first');
+  if (activeBrews.length) return toast('Finish the brews in progress first');
   if (state.brews.length && !confirm('Replace the current data with the fictional demo set?')) return;
   const demo = makeDemoData();
   state.teas = demo.teas;
@@ -1747,7 +2029,10 @@ function loadDemo() {
   ui.tab = 'insights';
   ui.insightTeaId = demo.teas[0].id;
   ui.insightRater = null;
-  form = {teaId: demo.teas[0].id, waterMl: 250, milkMl: 20, tempC: demo.teas[0].targetTempC, handling: 'none', preheat: false, notes: '', targetSteepS: demo.teas[0].targetSteepS};
+  form = {teaId: demo.teas[0].id, waterMl: 250, milkMl: 20, tempC: demo.teas[0].targetTempC, handling: 'none', preheat: false, notes: '', targetSteepS: demo.teas[0].targetSteepS, madeFor: state.settings.raters[0] || ''};
+  activeBrews = [];
+  saveActive();
+  ui.brewView = 'new';
   render();
   toast('Demo data loaded — fictional cups');
 }
@@ -1779,7 +2064,7 @@ function exportJson() {
 
 function importJson(file) {
   if (!file) return;
-  if (activeBrew) return toast('Finish the current brew first');
+  if (activeBrews.length) return toast('Finish the brews in progress first');
   const reader = new FileReader();
   reader.onload = () => {
     try {
@@ -1792,11 +2077,12 @@ function importJson(file) {
       state.settings = Object.assign(freshState().settings, state.settings || {});
       const first = state.teas[0];
       form = first
-        ? {teaId: first.id, waterMl: 250, milkMl: (first.type === 'green' || first.type === 'herbal') ? 0 : 20, tempC: first.targetTempC, handling: 'none', preheat: false, notes: '', targetSteepS: first.targetSteepS}
-        : {teaId: null, waterMl: 250, milkMl: 20, tempC: 95, handling: 'none', preheat: false, notes: '', targetSteepS: 180};
+        ? {teaId: first.id, waterMl: 250, milkMl: (first.type === 'green' || first.type === 'herbal') ? 0 : 20, tempC: first.targetTempC, handling: 'none', preheat: false, notes: '', targetSteepS: first.targetSteepS, madeFor: state.settings.raters[0] || ''}
+        : {teaId: null, waterMl: 250, milkMl: 20, tempC: 95, handling: 'none', preheat: false, notes: '', targetSteepS: 180, madeFor: state.settings.raters[0] || ''};
       saveState();
       ui.sheet = null;
       ui.tab = 'history';
+      ui.brewView = 'new';
       ui.insightTeaId = null;
       render();
       toast('Import complete');
@@ -1808,14 +2094,14 @@ function importJson(file) {
 }
 
 function resetAll() {
-  if (activeBrew) return toast('Finish the current brew first');
+  if (activeBrews.length) return toast('Finish the brews in progress first');
   if (!confirm('Reset everything? All brews, ratings and settings will be deleted.')) return;
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(ACTIVE_KEY);
   state = freshState();
-  activeBrew = null;
-  form = {teaId: state.teas[0].id, waterMl: 250, milkMl: 20, tempC: state.teas[0].targetTempC, handling: 'none', preheat: false, notes: '', targetSteepS: state.teas[0].targetSteepS};
-  ui = {tab: 'brew', historyFilter: 'all', insightTeaId: null, insightRater: null, sheet: null};
+  activeBrews = [];
+  form = {teaId: state.teas[0].id, waterMl: 250, milkMl: 20, tempC: state.teas[0].targetTempC, handling: 'none', preheat: false, notes: '', targetSteepS: state.teas[0].targetSteepS, madeFor: state.settings.raters[0] || ''};
+  ui = {tab: 'brew', brewView: 'new', historyFilter: 'all', insightTeaId: null, insightRater: null, sheet: null};
   render();
   toast('Reset complete');
 }
@@ -1935,11 +2221,22 @@ document.addEventListener('click', e => {
       render();
       break;
     case 'start': startBrew(); break;
-    case 'stop': stopBrew(); break;
-    case 'edit-active': openActiveActuals(); break;
+    case 'stop': stopBrew(el.dataset.id); break;
+    case 'select-brew':
+      ui.brewView = el.dataset.id;
+      render();
+      break;
+    case 'new-brew':
+      ui.brewView = 'new';
+      render();
+      break;
+    case 'open-manual': openManual(); break;
+    case 'set-manual': setManualField(el.dataset.field, el.dataset.value); break;
+    case 'save-manual': saveManual(); break;
+    case 'edit-active': openActiveActuals(el.dataset.id); break;
     case 'save-active': saveActiveActuals(); break;
     case 'set-confirm': setConfirmField(el.dataset.field, el.dataset.value); break;
-    case 'discard': discardActive(); break;
+    case 'discard': discardActive(el.dataset.id); break;
     case 'open-settings':
       ui.sheet = {type: 'settings'};
       render();
@@ -2073,6 +2370,20 @@ document.addEventListener('change', e => {
     ui.sheet.draft[el.dataset.confirm] = el.type === 'checkbox' ? el.checked : el.value;
     if (el.type === 'number') updateActualDerived();
   }
+  if (el.matches('[data-manual]') && ui.sheet && ui.sheet.type === 'manual') {
+    const field = el.dataset.manual;
+    ui.sheet.draft[field] = el.type === 'checkbox' ? el.checked : el.value;
+    if (field === 'teaId') {
+      const tea = getTea(el.value);
+      if (tea) {
+        ui.sheet.draft.tempC = tea.targetTempC;
+        ui.sheet.draft.steepMin = Math.floor(tea.targetSteepS / 60);
+        ui.sheet.draft.steepSec = tea.targetSteepS % 60;
+        if (tea.type === 'green' || tea.type === 'herbal') ui.sheet.draft.milkMl = 0;
+      }
+      renderSheetOnly();
+    }
+  }
   if (el.matches('[data-setting]')) {
     const key = el.dataset.setting;
     const val = el.value === '' ? null : Number(el.value);
@@ -2090,6 +2401,18 @@ document.addEventListener('input', e => {
   if (el.matches('[data-confirm]') && ui.sheet && (ui.sheet.type === 'confirm' || ui.sheet.type === 'actuals')) {
     ui.sheet.draft[el.dataset.confirm] = el.type === 'checkbox' ? el.checked : el.value;
     if (el.type === 'number') updateActualDerived();
+  }
+  if (el.matches('[data-manual]') && ui.sheet && ui.sheet.type === 'manual') {
+    const d = ui.sheet.draft;
+    const field = el.dataset.manual;
+    d[field] = el.type === 'checkbox' ? el.checked : el.value;
+    if (field === 'waterMl' || field === 'milkMl') {
+      const tea = getTea(d.teaId);
+      const water = Number(d.waterMl) || 0;
+      const milk = Number(d.milkMl) || 0;
+      if ($('#manual-conc')) $('#manual-conc').textContent = round1(((tea ? Number(tea.bagMassG) : 2) / Math.max(1, water)) * 1000);
+      if ($('#manual-mf')) $('#manual-mf').textContent = water + milk > 0 ? fmtPct(milk / (water + milk)) : '0%';
+    }
   }
   if (el.matches('[data-form]')) {
     const field = el.dataset.form;
@@ -2124,6 +2447,7 @@ function renderSheetOnly() {
   else if (ui.sheet.type === 'library') root.innerHTML = librarySheetHtml();
   else if (ui.sheet.type === 'confirm') root.innerHTML = confirmSheetHtml();
   else if (ui.sheet.type === 'actuals') root.innerHTML = actualsSheetHtml();
+  else if (ui.sheet.type === 'manual') root.innerHTML = manualSheetHtml();
 }
 
 function render() {
@@ -2139,7 +2463,7 @@ function render() {
     toastEl.style.top = ui.sheet ? '14px' : '';
     toastEl.style.bottom = ui.sheet ? 'auto' : '';
   }
-  if (ui.tab === 'brew' && activeBrew) ensureTick();
+  if (ui.tab === 'brew' && activeBrews.length) ensureTick();
 }
 
 window.__appErrors = [];
@@ -2149,6 +2473,11 @@ window.addEventListener('unhandledrejection', e => window.__appErrors.push(Strin
 window.handleAndroidBack = function() {
   if (ui.sheet) {
     ui.sheet = null;
+    render();
+    return true;
+  }
+  if (ui.tab === 'brew' && ui.brewView !== 'new') {
+    ui.brewView = 'new';
     render();
     return true;
   }

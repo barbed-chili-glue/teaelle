@@ -5,20 +5,26 @@
 A three-tab mobile app:
 
 1. **Brew** — recipe first, timer second. The 80% case is "same tea, same mug, one tap"; the form is pre-filled from the last recipe. A `Bag in` button starts a timestamp-based timer; `Bag out` stops it and opens a **confirm** sheet for the actuals (milk is often added after the timer). Confirming saves the brew and opens the rating sheet.
-2. **History** — the primary queue is **needs attention**: unconfirmed cups first, then unrated cups, not "most recent". Every brew keeps all of its ratings, so Alex and Ellen can rate the same cup independently.
+   - **Parallel cups:** the top of the screen is a strip of brew tabs, one per running cup, labelled with `madeFor` and showing time left (`2:14 left`) or time over (`0:35 over`) in a due state. `+` opens the new-cup form without disturbing the others. Each session has its own recipe snapshot and `startedAt`; only one card is rendered at a time.
+   - **Manual entry:** `Log a brew without the timer` opens a backfill sheet: made-at date/time, rater, tea, steep minutes/seconds, actuals. It saves a confirmed brew straight to History (unrated, so it joins the needs-attention queue).
+2. **History** — the primary queue is **needs attention**: unconfirmed cups first, then unrated cups, not "most recent". Every brew keeps all of its ratings, so Alex and Ellen can rate the same cup independently. Cards show `for <rater>` when the cup was brewed for someone.
 3. **Insights** — a demo model, data-health warnings, a time × temperature response surface, the best cup so far, and a 2×3 experiment plan.
 
 ## Data model
 
 ```text
 tea:     id, brand, product, type, bagMassG, bagFormat, targetTempC, targetSteepS
-brew:    id, ts, teaId, teaSnapshot, waterMl, milkMl, tempC, steepS,
-         handling, preheat, notes, confirmed
+brew:    id, ts, teaId, teaSnapshot, madeFor, waterMl, milkMl, tempC, steepS,
+         handling, preheat, notes, confirmed, source ('timer'|'manual')
 rating:  id, ts, rater, overall(1-7), strength(-1/0/1), bitterness(-1/0/1),
          milk(-1/0/1), wouldRepeat, blinded
+
+active session (localStorage `teaelle.active`, array):
+         id, madeFor, teaId, teaSnapshot, waterMl, milkMl, tempC, handling,
+         preheat, notes, targetSteepS, startedAt
 ```
 
-`teaSnapshot` is the tea identity at brew time (`brand, product, type, bagMassG, bagFormat, targetTempC, targetSteepS`). It means editing or deleting a tea never rewrites or breaks history. Ratings are one-to-many from brews. The tea product, not the brand, is the unit. Derived features:
+`teaSnapshot` is the tea identity at brew time (`brand, product, type, bagMassG, bagFormat, targetTempC, targetSteepS`). It means editing or deleting a tea never rewrites or breaks history. Ratings are one-to-many from brews. The tea product, not the brand, is the unit. `madeFor` is who the cup was brewed for; it is deliberately separate from `rating.rater` — a cup can be made for Ellen and rated by both people. Derived features:
 
 - concentration = bag mass × bags / water volume (g/L)
 - milk fraction = milk / (water + milk)
@@ -68,3 +74,6 @@ The plan is a 2×3 factorial around the predicted peak: two temperatures × thre
 - Temperature is recorded as entered; kettle calibration is a setting but not yet used to correct the value.
 - No multi-device sync; export/import is the bridge.
 - No PWA install prompt UI; use the browser's "Add to Home screen".
+- Parallel timers live in the app, not the OS: if the app is closed, no notification fires. Reopening restores the sessions and shows the correct remaining/over time, but there is no alarm while it is shut.
+- `madeFor` is not yet a model term. Once there is enough data, it could enter as a random effect or interact with concentration/milk (people take their tea differently), but the demo ridge model ignores it.
+- Manual entries carry `source: 'manual'` and are not distinguished in the UI yet; a future analysis should allow their steep time to be less precise than timer-recorded cups.
