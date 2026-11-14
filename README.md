@@ -12,7 +12,7 @@ A mobile-first, local-first tea brewing notebook that learns from your cups.
 - **Tea library** — add, edit or delete tea products, including the suggested temperature and steep time. Historical brews keep a snapshot of the tea they were brewed with, so deleting a tea never breaks history.
 - **Rate blind** — the rating sheet hides the brewing parameters until you save. Rate overall (1–7), strength, bitterness/astringency, milk balance, and whether you'd brew again. Multiple raters per cup are supported.
 - **History** — unconfirmed cups and unrated cups are queued at the top as **needs attention**; every brew keeps its parameters, tea snapshot and all of its ratings.
-- **Insights** — a demo ridge model fits a quadratic response surface over steep time and temperature, ranks the drivers, shows the best cup so far, and proposes a balanced 2×3 experiment around the predicted peak.
+- **Insights** — a demo ridge model fits a quadratic response surface over any two of steep time, temperature, concentration and milk fraction, ranks the drivers, shows the best cup so far, and proposes a balanced 2×3 experiment around the predicted peak.
 - **Local-first** — everything is stored in `localStorage` on the device. No account, no server, no telemetry. Export/import JSON from Settings.
 
 ## Why these dimensions

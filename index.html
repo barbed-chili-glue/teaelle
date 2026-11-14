@@ -126,6 +126,12 @@
   .driver-dir{font-weight:900;font-size:11px}
   .driver-dir.pos{color:var(--accent)}
   .driver-dir.neg{color:var(--danger)}
+  .surface-picks{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:6px;align-items:end;margin:0 0 10px}
+  .surface-pick{display:flex;flex-direction:column;gap:4px;min-width:0}
+  .surface-pick span{font-size:9px;font-weight:800;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+  .surface-pick select{padding:9px 8px;font-size:12px;border-radius:10px}
+  .surface-swap{border:1px solid var(--line);background:#fffdf8;border-radius:10px;width:34px;height:36px;font-size:14px;line-height:1;padding:0}
+  .surface-swap:active{background:var(--accent-soft)}
   .heatmap{width:100%;height:auto;display:block;margin:4px 0 0}
   .legend{display:flex;align-items:center;gap:7px;font-size:9.5px;color:var(--muted);margin-top:7px}
   .legend-bar{height:6px;flex:1;border-radius:99px;background:linear-gradient(90deg,#e6d8c2,#d9a441,#2f6b4f)}
@@ -420,6 +426,8 @@ let ui = {
   historyFilter: 'all',
   insightTeaId: null,
   insightRater: null,
+  surfaceX: 'time',
+  surfaceY: 'temp',
   sheet: null
 };
 
@@ -1235,6 +1243,22 @@ function renderInsights() {
   `;
 }
 
+function setSurfaceAxis(axis, key) {
+  if (!SURFACE_VARS[key]) return;
+  const a = axis === 'x' ? 'surfaceX' : 'surfaceY';
+  const b = axis === 'x' ? 'surfaceY' : 'surfaceX';
+  if (ui[b] === key) ui[b] = ui[a];
+  ui[a] = key;
+  render();
+}
+
+function swapSurface() {
+  const t = ui.surfaceX;
+  ui.surfaceX = ui.surfaceY;
+  ui.surfaceY = t;
+  render();
+}
+
 function getInsightTea() {
   if (ui.insightTeaId) {
     const t = getTea(ui.insightTeaId);
@@ -1263,6 +1287,11 @@ function renderModel(tea, rater, obs) {
   const bestObs = obs.slice().sort((a, b) => (b.rating.overall - a.rating.overall) || (b.brew.ts - a.brew.ts))[0];
   const bestTea = brewTea(bestObs.brew);
   const plan = makePlan(model, tea, obs);
+  let sx = SURFACE_VARS[ui.surfaceX] ? ui.surfaceX : 'time';
+  let sy = SURFACE_VARS[ui.surfaceY] ? ui.surfaceY : 'temp';
+  if (sy === sx) sy = sx === 'temp' ? 'time' : 'temp';
+  const surface = makeHeatmap(model.fit, tea, obs, sx, sy);
+  const axisSelect = (axis, sel) => `<label class="surface-pick"><span>${axis.toUpperCase()} axis</span><select data-surface-${axis}>${Object.entries(SURFACE_VARS).map(([k, v]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${v.label}</option>`).join('')}</select></label>`;
 
   const warnings = dataWarnings(obs);
   const drivers = model.importance.slice().sort((a, b) => b.value - a.value);
@@ -1290,10 +1319,15 @@ function renderModel(tea, rater, obs) {
     </section>
 
     <section class="card">
-      <div class="section-head"><h3>Response surface</h3><span class="pill">time × temperature</span></div>
-      ${renderHeatmap(model, obs, tea)}
+      <div class="section-head"><h3>Response surface</h3><span class="pill">${SURFACE_VARS[sx].short} × ${SURFACE_VARS[sy].short}</span></div>
+      <div class="surface-picks">
+        ${axisSelect('x', sx)}
+        <button class="surface-swap" type="button" data-action="swap-surface" aria-label="Swap surface axes" title="Swap axes">⇄</button>
+        ${axisSelect('y', sy)}
+      </div>
+      ${renderHeatmap(obs, tea, surface)}
       <div class="legend"><span>lower</span><div class="legend-bar"></div><span>higher predicted rating</span></div>
-      <p class="hint">Dots are observed cups, coloured by their overall rating. The surface holds concentration, milk and handling at your usual values for this tea.</p>
+      <p class="hint">Dots are observed cups, coloured by their overall rating. Inputs not on the axes are held at your usual values for this tea; the demo model is additive across the two axes.</p>
     </section>
 
     <section class="card">
@@ -1311,7 +1345,7 @@ function renderModel(tea, rater, obs) {
 
     <section class="card">
       <div class="section-head"><h3>Next experiment</h3><span class="pill">2 × 3 factorial</span></div>
-      <p class="muted" style="font-size:12px;line-height:1.5;margin:0 0 2px">A balanced 12-brew block around the predicted peak. Two temperatures × three steep times, two replicates. Hold concentration, milk and handling steady.</p>
+      <p class="muted" style="font-size:12px;line-height:1.5;margin:0 0 2px">A balanced 12-brew block around the predicted time × temperature peak. Two temperatures × three steep times, two replicates. Hold concentration, milk and handling steady.</p>
       <div class="plan-grid">
         ${plan.temps.map(t => `<div class="plan-row"><span class="plan-temp">${t}°C</span>${plan.times.map(time => `<button class="plan-cell" data-action="use-cell" data-temp="${t}" data-time="${time}">${fmtSteep(time)}</button>`).join('')}</div>`).join('')}
       </div>
@@ -1351,16 +1385,28 @@ function corr(a, b) {
 }
 
 /* ---------- model ---------- */
-function featureVector(b, tea) {
+function teaCenters(tea) {
   const green = tea.type === 'green';
-  const centerTime = Math.log(green ? 150 : 200);
-  const centerTemp = green ? 78 : 93;
-  const lt = Math.log(Math.max(30, Number(b.steepS))) - centerTime;
-  const temp = Number(b.tempC) - centerTemp;
-  const bagMass = Number((b.teaSnapshot && b.teaSnapshot.bagMassG) || tea.bagMassG) || 2;
-  const conc = (bagMass / Math.max(1, Number(b.waterMl))) * 1000;
-  const milkFrac = Number(b.milkMl || 0) / Math.max(1, Number(b.waterMl) + Number(b.milkMl || 0));
-  return [lt, temp, lt * lt, temp * temp, conc, milkFrac, b.handling === 'squeeze' ? 1 : 0, b.handling === 'dunk' ? 1 : 0, b.preheat ? 1 : 0];
+  return {time: Math.log(green ? 150 : 200), temp: green ? 78 : 93};
+}
+
+function bagMassOf(b, tea) {
+  return Number((b.teaSnapshot && b.teaSnapshot.bagMassG) || tea.bagMassG) || 2;
+}
+
+function concOf(b, tea) {
+  return (bagMassOf(b, tea) / Math.max(1, Number(b.waterMl))) * 1000;
+}
+
+function milkFracOf(b) {
+  return Number(b.milkMl || 0) / Math.max(1, Number(b.waterMl) + Number(b.milkMl || 0));
+}
+
+function featureVector(b, tea) {
+  const c = teaCenters(tea);
+  const lt = Math.log(Math.max(30, Number(b.steepS))) - c.time;
+  const temp = Number(b.tempC) - c.temp;
+  return [lt, temp, lt * lt, temp * temp, concOf(b, tea), milkFracOf(b), b.handling === 'squeeze' ? 1 : 0, b.handling === 'dunk' ? 1 : 0, b.preheat ? 1 : 0];
 }
 
 const GROUPS = [
@@ -1371,6 +1417,16 @@ const GROUPS = [
   {name:'Bag handling', idx:[6, 7]},
   {name:'Cup preheat', idx:[8]}
 ];
+
+/* Response-surface axes. Only continuous inputs can form a surface; handling and
+   preheat are categorical and stay held at their usual values. idx/sq point into
+   the feature vector above. */
+const SURFACE_VARS = {
+  time: {label:'Steep time', short:'steep time', idx:0, sq:2, kind:'time'},
+  temp: {label:'Water temperature', short:'water temp', idx:1, sq:3, kind:'temp'},
+  conc: {label:'Concentration', short:'concentration', idx:4, sq:null, kind:'conc'},
+  milk: {label:'Milk fraction', short:'milk fraction', idx:5, sq:null, kind:'milk'}
+};
 
 function solveLinear(A, b) {
   const n = A.length;
@@ -1479,41 +1535,83 @@ function fitModel(obs, tea) {
   const maxImp = Math.max(...importance.map(i => i.value), 1e-9);
   importance.forEach(i => i.value = i.value / maxImp);
 
-  const heatmap = makeHeatmap(model, tea, X);
-  return {n: obs.length, r2, looR2, importance, heatmap};
+  const timeTemp = makeHeatmap(model, tea, obs, 'time', 'temp');
+  return {n: obs.length, r2, looR2, importance, timeTemp, fit: model};
 }
 
-function makeHeatmap(model, tea, X) {
-  const green = tea.type === 'green';
-  const timeMin = green ? 90 : 120;
-  const timeMax = green ? 210 : 330;
-  const tempMin = green ? 68 : 80;
-  const tempMax = green ? 88 : 100;
-  const cols = 12, rows = 8;
-  const times = Array.from({length: cols}, (_, i) => timeMin + (timeMax - timeMin) * i / (cols - 1));
-  const temps = Array.from({length: rows}, (_, i) => tempMin + (tempMax - tempMin) * i / (rows - 1));
+function surfaceRaw(b, tea, key) {
+  if (key === 'time') return Math.max(30, Number(b.steepS));
+  if (key === 'temp') return Number(b.tempC);
+  if (key === 'conc') return concOf(b, tea);
+  return milkFracOf(b);
+}
+
+function surfaceFeature(tea, key, raw) {
+  const c = teaCenters(tea);
+  if (key === 'time') return Math.log(Math.max(30, raw)) - c.time;
+  if (key === 'temp') return raw - c.temp;
+  return raw;
+}
+
+function surfaceFormat(key, v) {
+  if (key === 'time') return fmtSteep(Math.round(v));
+  if (key === 'temp') return `${Math.round(v)}°C`;
+  if (key === 'conc') return `${v.toFixed(1)} g/L`;
+  return `${Math.round(v * 100)}%`;
+}
+
+function surfaceTick(key, v) {
+  if (key === 'time') return fmtSteep(Math.round(v / 5) * 5);
+  if (key === 'temp') return `${Math.round(v)}°`;
+  if (key === 'conc') return v.toFixed(1);
+  return `${Math.round(v * 100)}%`;
+}
+
+function surfaceRange(vals, key) {
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (!isFinite(lo) || !isFinite(hi)) { lo = 0; hi = 1; }
+  if (hi - lo < 1e-9) {
+    const d = key === 'milk' ? 0.08 : key === 'conc' ? 0.5 : key === 'temp' ? 5 : 30;
+    lo -= d; hi += d;
+  }
+  const pad = (hi - lo) * 0.08;
+  lo -= pad; hi += pad;
+  if (key === 'milk') { lo = Math.max(0, lo); hi = Math.max(hi, lo + 0.02); }
+  if (key === 'time') { lo = Math.max(30, lo); hi = Math.min(900, hi); }
+  if (key === 'temp') { lo = Math.max(35, lo); hi = Math.min(100, hi); }
+  if (key === 'conc') { lo = Math.max(0.2, lo); hi = Math.max(hi, lo + 0.1); }
+  return [lo, hi];
+}
+
+function makeHeatmap(model, tea, obs, xKey, yKey) {
+  const xv = SURFACE_VARS[xKey] || SURFACE_VARS.time;
+  const yv = SURFACE_VARS[yKey] || SURFACE_VARS.temp;
+  const X = obs.map(o => featureVector(o.brew, tea));
   const med = X[0].map((_, j) => median(X.map(r => r[j])));
-  const centerTime = Math.log(green ? 150 : 200);
-  const centerTemp = green ? 78 : 93;
+  const cols = 12, rows = 8;
+  const [xMin, xMax] = surfaceRange(obs.map(o => surfaceRaw(o.brew, tea, xv.kind)), xv.kind);
+  const [yMin, yMax] = surfaceRange(obs.map(o => surfaceRaw(o.brew, tea, yv.kind)), yv.kind);
+  const xs = Array.from({length: cols}, (_, i) => xMin + (xMax - xMin) * i / (cols - 1));
+  const ys = Array.from({length: rows}, (_, i) => yMin + (yMax - yMin) * i / (rows - 1));
   const values = [];
-  let best = {value: -Infinity, time: times[0], temp: temps[0]};
+  let best = {value: -Infinity, x: xs[0], y: ys[0]};
   for (let r = 0; r < rows; r++) {
     const row = [];
     for (let c = 0; c < cols; c++) {
       const raw = med.slice();
-      const lt = Math.log(Math.max(30, times[c])) - centerTime;
-      const tc = temps[r] - centerTemp;
-      raw[0] = lt;
-      raw[1] = tc;
-      raw[2] = lt * lt;
-      raw[3] = tc * tc;
+      const xf = surfaceFeature(tea, xv.kind, xs[c]);
+      const yf = surfaceFeature(tea, yv.kind, ys[r]);
+      raw[xv.idx] = xf;
+      if (xv.sq != null) raw[xv.sq] = xf * xf;
+      raw[yv.idx] = yf;
+      if (yv.sq != null) raw[yv.sq] = yf * yf;
       const v = predict(model, raw);
       row.push(v);
-      if (v > best.value) best = {value: v, time: times[c], temp: temps[r]};
+      if (v > best.value) best = {value: v, x: xs[c], y: ys[r]};
     }
     values.push(row);
   }
-  return {times, temps, values, best, timeMin, timeMax, tempMin, tempMax, cols, rows};
+  return {xKey: xv.kind, yKey: yv.kind, xs, ys, values, best, xMin, xMax, yMin, yMax, cols, rows};
 }
 
 /* ---------- heatmap SVG ---------- */
@@ -1535,55 +1633,58 @@ function ratingColor(r) {
   return mix('#d9a441', '#2f6b4f', (v - 4) / 3);
 }
 
-function renderHeatmap(model, obs, tea) {
-  const H = model.heatmap;
-  const W = 360, HH = 236, L = 38, R = 10, T = 12, B = 34;
+function renderHeatmap(obs, tea, H) {
+  const W = 360, HH = 236, L = 44, R = 10, T = 12, B = 34;
   const pw = W - L - R, ph = HH - T - B;
   const cw = pw / H.cols, ch = ph / H.rows;
   const all = H.values.flat();
   const min = Math.min(...all), max = Math.max(...all);
+  const xTitle = SURFACE_VARS[H.xKey].short;
+  const yTitle = SURFACE_VARS[H.yKey].short;
   let cells = '';
   for (let r = 0; r < H.rows; r++) {
     for (let c = 0; c < H.cols; c++) {
       const x = L + c * cw, y = T + (H.rows - 1 - r) * ch;
-      cells += `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${(cw + 0.4).toFixed(2)}" height="${(ch + 0.4).toFixed(2)}" fill="${heatColor(H.values[r][c], min, max)}"><title>${fmtSteep(H.times[c])} · ${H.temps[r].toFixed(0)}°C → ${H.values[r][c].toFixed(2)}</title></rect>`;
+      cells += `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${(cw + 0.4).toFixed(2)}" height="${(ch + 0.4).toFixed(2)}" fill="${heatColor(H.values[r][c], min, max)}"><title>${surfaceFormat(H.xKey, H.xs[c])} · ${surfaceFormat(H.yKey, H.ys[r])} → ${H.values[r][c].toFixed(2)}</title></rect>`;
     }
   }
   const dots = obs.map(o => {
-    const x = L + ((o.brew.steepS - H.timeMin) / (H.timeMax - H.timeMin)) * pw;
-    const y = T + (1 - (o.brew.tempC - H.tempMin) / (H.tempMax - H.tempMin)) * ph;
+    const xraw = surfaceRaw(o.brew, tea, H.xKey);
+    const yraw = surfaceRaw(o.brew, tea, H.yKey);
+    const x = L + ((xraw - H.xMin) / (H.xMax - H.xMin)) * pw;
+    const y = T + (1 - (yraw - H.yMin) / (H.yMax - H.yMin)) * ph;
     if (x < L || x > L + pw || y < T || y > T + ph) return '';
-    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.4" fill="${ratingColor(o.rating.overall)}" stroke="#fffaf1" stroke-width="1.2"><title>${fmtSteep(o.brew.steepS)} · ${o.brew.tempC}°C · ${o.rating.overall}/7</title></circle>`;
+    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.4" fill="${ratingColor(o.rating.overall)}" stroke="#fffaf1" stroke-width="1.2"><title>${surfaceFormat(H.xKey, xraw)} · ${surfaceFormat(H.yKey, yraw)} · ${o.rating.overall}/7</title></circle>`;
   }).join('');
-  const bx = L + ((H.best.time - H.timeMin) / (H.timeMax - H.timeMin)) * pw;
-  const by = T + (1 - (H.best.temp - H.tempMin) / (H.tempMax - H.tempMin)) * ph;
+  const bx = L + ((H.best.x - H.xMin) / (H.xMax - H.xMin)) * pw;
+  const by = T + (1 - (H.best.y - H.yMin) / (H.yMax - H.yMin)) * ph;
   const xTicks = [0, 0.5, 1].map(f => {
-    const t = H.timeMin + (H.timeMax - H.timeMin) * f;
-    return `<text x="${(L + pw * f).toFixed(1)}" y="${HH - 12}" text-anchor="middle" font-size="9" fill="#7c7264">${fmtSteep(t)}</text>`;
+    const t = H.xMin + (H.xMax - H.xMin) * f;
+    return `<text x="${(L + pw * f).toFixed(1)}" y="${HH - 12}" text-anchor="middle" font-size="9" fill="#7c7264">${surfaceTick(H.xKey, t)}</text>`;
   }).join('');
   const yTicks = [0, 0.5, 1].map(f => {
-    const t = H.tempMin + (H.tempMax - H.tempMin) * f;
-    return `<text x="${L - 7}" y="${(T + ph * (1 - f) + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="#7c7264">${t.toFixed(0)}°</text>`;
+    const t = H.yMin + (H.yMax - H.yMin) * f;
+    return `<text x="${L - 7}" y="${(T + ph * (1 - f) + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="#7c7264">${surfaceTick(H.yKey, t)}</text>`;
   }).join('');
-  return `<svg class="heatmap" viewBox="0 0 ${W} ${HH}" role="img" aria-label="Predicted rating by steep time and water temperature">
+  return `<svg class="heatmap" viewBox="0 0 ${W} ${HH}" role="img" aria-label="Predicted rating by ${xTitle} and ${yTitle}">
     ${cells}
     ${xTicks}${yTicks}
-    <text x="${L + pw / 2}" y="${HH - 1}" text-anchor="middle" font-size="9" fill="#7c7264">steep time</text>
-    <text x="11" y="${T + ph / 2}" text-anchor="middle" font-size="9" fill="#7c7264" transform="rotate(-90 11 ${T + ph / 2})">water temp</text>
+    <text x="${L + pw / 2}" y="${HH - 1}" text-anchor="middle" font-size="9" fill="#7c7264">${xTitle}</text>
+    <text x="11" y="${T + ph / 2}" text-anchor="middle" font-size="9" fill="#7c7264" transform="rotate(-90 11 ${T + ph / 2})">${yTitle}</text>
     ${dots}
-    <circle cx="${bx.toFixed(1)}" cy="${by.toFixed(1)}" r="7" fill="none" stroke="#1f2a24" stroke-width="1.6" opacity=".8"><title>Predicted peak</title></circle>
+    <circle cx="${bx.toFixed(1)}" cy="${by.toFixed(1)}" r="7" fill="none" stroke="#1f2a24" stroke-width="1.6" opacity=".8"><title>Predicted peak: ${surfaceFormat(H.xKey, H.best.x)} · ${surfaceFormat(H.yKey, H.best.y)}</title></circle>
   </svg>`;
 }
 
 /* ---------- experiment plan ---------- */
 function makePlan(model, tea, obs) {
   const green = tea.type === 'green';
-  const best = model.heatmap.best;
+  const best = model.timeTemp.best;
   const tMin = green ? 70 : 82, tMax = green ? 88 : 100;
   const sMin = green ? 90 : 120, sMax = green ? 210 : 330;
-  let temps = [best.temp - 5, best.temp + 5].map(v => clamp(Math.round(v), tMin, tMax));
-  if (temps[0] === temps[1]) temps = [clamp(Math.round(best.temp), tMin, tMax), clamp(Math.round(best.temp) + 5, tMin, tMax)];
-  const times = [best.time - 30, best.time, best.time + 30].map(v => clamp(Math.round(v / 5) * 5, sMin, sMax));
+  let temps = [best.y - 5, best.y + 5].map(v => clamp(Math.round(v), tMin, tMax));
+  if (temps[0] === temps[1]) temps = [clamp(Math.round(best.y), tMin, tMax), clamp(Math.round(best.y) + 5, tMin, tMax)];
+  const times = [best.x - 30, best.x, best.x + 30].map(v => clamp(Math.round(v / 5) * 5, sMin, sMax));
   return {temps, times};
 }
 
@@ -2281,6 +2382,9 @@ document.addEventListener('click', e => {
     case 'brew-again':
       brewAgain(el.dataset.id);
       break;
+    case 'swap-surface':
+      swapSurface();
+      break;
     case 'delete-brew':
       deleteBrew(el.dataset.id);
       break;
@@ -2349,6 +2453,8 @@ document.addEventListener('change', e => {
     ui.insightRater = el.value;
     render();
   }
+  if (el.matches('[data-surface-x]')) setSurfaceAxis('x', el.value);
+  if (el.matches('[data-surface-y]')) setSurfaceAxis('y', el.value);
   if (el.matches('[data-form="teaId"]')) {
     form.teaId = el.value;
     const tea = getTea(el.value);

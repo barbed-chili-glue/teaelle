@@ -8,7 +8,7 @@ A three-tab mobile app:
    - **Parallel cups:** the top of the screen is a strip of brew tabs, one per running cup, labelled with `madeFor` and showing time left (`2:14 left`) or time over (`0:35 over`) in a due state. `+` opens the new-cup form without disturbing the others. Each session has its own recipe snapshot and `startedAt`; only one card is rendered at a time.
    - **Manual entry:** `Log a brew without the timer` opens a backfill sheet: made-at date/time, rater, tea, steep minutes/seconds, actuals. It saves a confirmed brew straight to History (unrated, so it joins the needs-attention queue).
 2. **History** — the primary queue is **needs attention**: unconfirmed cups first, then unrated cups, not "most recent". Every brew keeps all of its ratings, so Alex and Ellen can rate the same cup independently. Cards show `for <rater>` when the cup was brewed for someone.
-3. **Insights** — a demo model, data-health warnings, a time × temperature response surface, the best cup so far, and a 2×3 experiment plan.
+3. **Insights** — a demo model, data-health warnings, a response surface with selectable axes (steep time, temperature, concentration, milk fraction), the best cup so far, and a 2×3 experiment plan.
 
 ## Data model
 
@@ -51,7 +51,7 @@ Ridge regression with:
 - bag handling (squeeze, dunk vs lift out)
 - cup preheat
 
-The model is fit per tea product and per rater (or all raters). It reports in-sample R² and leave-one-out R², permutation importance by factor group, and a predicted response surface. The surface is a demo: it holds concentration, milk and handling at the median for the selected tea.
+The model is fit per tea product and per rater (or all raters). It reports in-sample R² and leave-one-out R², permutation importance by factor group, and a predicted response surface. The surface is a demo: pick any two of steep time, temperature, concentration and milk fraction; the remaining inputs stay held at their median for the selected tea. Handling and preheat are categorical and are not surface axes.
 
 Production model: cumulative-logit ordinal regression with `(1|rater)`, `(1|product)`, `(1|day)`, a spline or quadratic in log time, temperature × time interaction, and weakly informative/regularising priors. Validate with LOO and posterior predictive checks. Report a robust region, not a single peak.
 
