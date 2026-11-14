@@ -66,6 +66,7 @@ Expected: `package: name='com.teaelle.app' versionCode='N'`, no
 | 1 | 1.0.0 | First signed release. |
 | 2 | 1.0.1 | Tea library edit/delete; confirm actuals at bag-out; edit actuals mid-brew; history snapshots. |
 | 3 | 1.1.0 | Parallel brew sessions with rater-labelled tabs and time-left/over countdowns; `madeFor` on brews; manual brew entry without the timer. |
+| 4 | 1.2.0 | Insights response surface with selectable axes: any two of steep time, temperature, concentration and milk fraction; data-derived axis ranges; 2×3 plan still targets time × temperature. PWA cache v4. |
 
 ## Custody
 
